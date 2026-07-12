@@ -173,52 +173,7 @@ with tab_dashboard:
         c4.metric("Status VENDOR", jml_vendor)
         
         st.divider()
-        
-        # ==========================================
-        # TABEL MATRIKS VENDOR VS STATUS (PERMINTAAN GAMBAR)
-        # ==========================================
-        st.subheader("📋 Matriks Summary Kelolaan Vendor")
-        if not df_tampil.empty and 'Vendor' in df_tampil.columns and 'STATUS' in df_tampil.columns:
-            # Pastikan teks status seragam huruf kapital
-            df_matriks = df_tampil.copy()
-            df_matriks['STATUS'] = df_matriks['STATUS'].astype(str).str.upper()
-            
-            # Membuat Pivot Table Jumlah Unit berdasarkan Status
-            pivot_unit = df_matriks.pivot_table(
-                index='Vendor', 
-                columns='STATUS', 
-                values='TANK ID', 
-                aggfunc='count', 
-                fill_value=0
-            )
-            
-            # Pastikan kolom-kolom status utama ada di tabel matriks
-            for status_wajib in ['EMPTY', 'FULL', 'INSTALL', 'VENDOR']:
-                if status_wajib not in pivot_unit.columns:
-                    pivot_unit[status_wajib] = 0
-            
-            # Memilih susunan kolom agar rapi
-            pivot_unit = pivot_unit[['EMPTY', 'FULL', 'INSTALL', 'VENDOR']]
-            
-            # Hitung Total Qty per Vendor
-            total_qty_vendor = df_matriks.groupby('Vendor')['QTY_NUM'].sum()
-            # Hitung Total Unit per Vendor
-            total_unit_vendor = df_matriks.groupby('Vendor')['TANK ID'].count()
-            
-            # Gabungkan ke dalam satu DataFrame ringkasan
-            matriks_final = pivot_unit.copy()
-            matriks_final['Total Qty (Kg)'] = total_qty_vendor
-            matriks_final['Total Isotank'] = total_unit_vendor
-            matriks_final = matriks_final.reset_index()
-            
-            # Menampilkan tabel matriks summary
-            st.dataframe(matriks_final, use_container_width=True, hide_index=True)
-        else:
-            st.info("Data Vendor atau Status tidak ditemukan untuk membuat tabel ringkasan matriks.")
-
-        st.divider()
-        
-        # GRAFIK VISUAL (DENGAN ANGKA LANGSUNG MUNCUL)
+          # GRAFIK VISUAL (DENGAN ANGKA LANGSUNG MUNCUL)
         kolom_grafik1, kolom_grafik2 = st.columns(2)
         with kolom_grafik1:
             st.markdown("**Perbandingan Status Tangki**")
