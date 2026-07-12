@@ -297,13 +297,13 @@ with tab_input:
             st.info(f"✨ Tangki **{input_tank_id}** baru belum terdaftar. Silakan isi data dari awal.")
 
     # Pilihan Dropdown Dinamis
-    opsi_vendor = ["ROLIMEX", "DWIJAYA", "ENERGI JAYA INOVASI PT", "ADIMITRA"]
+    opsi_vendor = ["ROL100IDR", "DWI101IDR", "ENERGI JAYA INOVASI, PT", "ADI106IDR"]
     if not df_mentah.empty and 'Vendor' in df_mentah.columns:
         opsi_vendor = sorted(list(set(opsi_vendor + df_mentah['Vendor'].astype(str).unique().tolist())))
     if "-- Pilih Vendor --" not in opsi_vendor:
         opsi_vendor = ["-- Pilih Vendor --"] + opsi_vendor
 
-    opsi_lokasi = ["WAREHOUSE", "OUTBOUND", "INBOUND", "25KT", "INBOUND- KOE WTR", "INBOUND - SUB KOE"]
+    opsi_lokasi = ["WAREHOUSE", "OUTBOUND", "25KT", "INBOUND- KOE WTR", "INBOUND - SUB KOE"]
     if not df_mentah.empty and 'LOCATION' in df_mentah.columns:
         opsi_lokasi = sorted(list(set(opsi_lokasi + df_mentah['LOCATION'].astype(str).unique().tolist())))
     if "-- Pilih Lokasi --" not in opsi_lokasi:
