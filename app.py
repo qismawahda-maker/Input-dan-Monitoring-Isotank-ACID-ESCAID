@@ -3,55 +3,46 @@ import pandas as pd
 import plotly.express as px
 import gspread
 from google.oauth2.service_account import Credentials
+import io
 
 # ==========================================
 # 1. KONFIGURASI AWAL & CUSTOM CSS FONT
 # ==========================================
 st.set_page_config(page_title="MONITORING ISOTANK", page_icon="🛢️", layout="wide")
 
-# --- KODE CUSTOM CSS UNTUK MEMPERBESAR FONT ---
 st.markdown("""
     <style>
-        /* Ukuran font untuk Judul Utama */
         .main-title {
             font-size: 42px !important;
             font-weight: bold;
             margin-bottom: 20px;
         }
-        /* Ukuran font untuk Subheader / Judul Bagian */
         .stMarkdown h3, .stMarkdown h5 {
             font-size: 26px !important;
             font-weight: bold !important;
         }
-        /* Ukuran font untuk Label pada Filter Dropdown & Input */
         .stSelectbox label, .stTextInput label, .stNumberInput label {
             font-size: 20px !important;
             font-weight: 500 !important;
         }
-        /* Ukuran font untuk teks di dalam Dropdown & Input */
         .stSelectbox div, .stTextInput div, .stNumberInput div {
             font-size: 18px !important;
         }
-        /* Ukuran font untuk Teks Menu Tabs (Dashboard / Input) */
         .stTabs button {
             font-size: 22px !important;
         }
-        /* Ukuran teks angka pada kartu KPI */
         [data-testid="stMetricValue"] {
             font-size: 36px !important;
         }
-        /* Ukuran teks label kecil pada kartu KPI */
         [data-testid="stMetricLabel"] {
             font-size: 18px !important;
         }
-        /* Ukuran font untuk Tabel Data Detail */
         .stDataFrame div {
             font-size: 16px !important;
         }
     </style>
 """, unsafe_allow_html=True)
 
-# Menggunakan class HTML khusus untuk judul utama agar CSS di atas berjalan
 st.markdown('<div class="main-title">🛢️ MONITORING ISOTANK</div>', unsafe_allow_html=True)
 
 SPREADSHEET_URL = 'https://docs.google.com/spreadsheets/d/1eX12pN5sfohdIlEOWKNMv2Cj80lTRvxp0k8H-zcd4DI/edit?gid=0#gid=0'
@@ -183,14 +174,61 @@ with tab_dashboard:
         
         st.divider()
         
-        # GRAFIK VISUAL
+        # ==========================================
+        # TABEL MATRIKS VENDOR VS STATUS (PERMINTAAN GAMBAR)
+        # ==========================================
+        st.subheader("📋 Matriks Summary Kelolaan Vendor")
+        if not df_tampil.empty and 'Vendor' in df_tampil.columns and 'STATUS' in df_tampil.columns:
+            # Pastikan teks status seragam huruf kapital
+            df_matriks = df_tampil.copy()
+            df_matriks['STATUS'] = df_matriks['STATUS'].astype(str).str.upper()
+            
+            # Membuat Pivot Table Jumlah Unit berdasarkan Status
+            pivot_unit = df_matriks.pivot_table(
+                index='Vendor', 
+                columns='STATUS', 
+                values='TANK ID', 
+                aggfunc='count', 
+                fill_value=0
+            )
+            
+            # Pastikan kolom-kolom status utama ada di tabel matriks
+            for status_wajib in ['EMPTY', 'FULL', 'INSTALL', 'VENDOR']:
+                if status_wajib not in pivot_unit.columns:
+                    pivot_unit[status_wajib] = 0
+            
+            # Memilih susunan kolom agar rapi
+            pivot_unit = pivot_unit[['EMPTY', 'FULL', 'INSTALL', 'VENDOR']]
+            
+            # Hitung Total Qty per Vendor
+            total_qty_vendor = df_matriks.groupby('Vendor')['QTY_NUM'].sum()
+            # Hitung Total Unit per Vendor
+            total_unit_vendor = df_matriks.groupby('Vendor')['TANK ID'].count()
+            
+            # Gabungkan ke dalam satu DataFrame ringkasan
+            matriks_final = pivot_unit.copy()
+            matriks_final['Total Qty (Kg)'] = total_qty_vendor
+            matriks_final['Total Isotank'] = total_unit_vendor
+            matriks_final = matriks_final.reset_index()
+            
+            # Menampilkan tabel matriks summary
+            st.dataframe(matriks_final, use_container_width=True, hide_index=True)
+        else:
+            st.info("Data Vendor atau Status tidak ditemukan untuk membuat tabel ringkasan matriks.")
+
+        st.divider()
+        
+        # GRAFIK VISUAL (DENGAN ANGKA LANGSUNG MUNCUL)
         kolom_grafik1, kolom_grafik2 = st.columns(2)
         with kolom_grafik1:
             st.markdown("**Perbandingan Status Tangki**")
             if 'STATUS' in df_tampil.columns and total_tangki > 0:
                 data_status = df_tampil['STATUS'].value_counts().reset_index()
                 data_status.columns = ['Status', 'Jumlah']
+                
+                # Menampilkan angka langsung dengan textinfo='value'
                 fig1 = px.pie(data_status, names='Status', values='Jumlah', hole=0.4)
+                fig1.update_traces(textposition='inside', textinfo='value+percent')
                 st.plotly_chart(fig1, use_container_width=True)
             else:
                 st.info("Tidak ada data untuk grafik ini.")
@@ -200,15 +238,34 @@ with tab_dashboard:
             if 'LOCATION' in df_tampil.columns and total_tangki > 0:
                 data_lokasi = df_tampil['LOCATION'].value_counts().reset_index()
                 data_lokasi.columns = ['Lokasi', 'Jumlah']
-                fig2 = px.bar(data_lokasi, x='Lokasi', y='Jumlah', color='Lokasi')
+                
+                # Menampilkan angka langsung di atas/dalam bar chart
+                fig2 = px.bar(data_lokasi, x='Lokasi', y='Jumlah', color='Lokasi', text='Jumlah')
+                fig2.update_traces(textposition='inside')
                 st.plotly_chart(fig2, use_container_width=True)
             else:
                 st.info("Tidak ada data untuk grafik ini.")
                 
+        st.divider()
+
+        # DATA DETAIL & EXPORT XLSX
         st.subheader("Data Detail Keseluruhan")
         if 'QTY_NUM' in df_tampil.columns:
             df_tampil = df_tampil.drop(columns=['QTY_NUM'])
+            
         st.dataframe(df_tampil, use_container_width=True, hide_index=True)
+        
+        # --- PROSES DOWNLOAD FORMAT XLSX (EXCEL) ---
+        buffer = io.BytesIO()
+        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+            df_tampil.to_excel(writer, index=False, sheet_name='Monitoring Isotank')
+        
+        st.download_button(
+            label="📥 Download Data Detail (Format Excel .xlsx)",
+            data=buffer.getvalue(),
+            file_name="Data_Detail_Isotank.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 
 # --- BAGIAN FORM INPUT ---
 with tab_input:
