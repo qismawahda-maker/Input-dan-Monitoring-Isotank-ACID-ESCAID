@@ -226,7 +226,7 @@ with tab_dashboard:
                 # 1. Memperbesar tulisan angka di atas batang tangki
                 fig2.update_traces(
                     textposition='outside', 
-                    textfont_size=20,       # << Ukuran angka di atas batang menjadi 20px (Sangat Jelas)
+                    textfont_size=15,       # << Ukuran angka di atas batang menjadi 20px (Sangat Jelas)
                     textfont_color='white'  # Menyesuaikan warna teks angka agar kontras dengan background gelap
                 )
                 
