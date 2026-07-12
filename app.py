@@ -103,6 +103,19 @@ def konversi_ke_date(tgl_str):
             continue
     return None
 
+# FUNGSI PENYELAMAT: Mengubah string dari Sheets ke float secara aman
+def safe_float(val, default=0.0):
+    if val is None:
+        return default
+    # Bersihkan spasi dan hapus tanda koma ribuan jika ada (misal: "25,000" -> "25000")
+    val_str = str(val).strip().replace(',', '')
+    if not val_str or val_str == "":
+        return default
+    try:
+        return float(val_str)
+    except ValueError:
+        return default
+
 # ==========================================
 # 4. TAMPILAN DASHBOARD & FORM INPUT
 # ==========================================
@@ -151,7 +164,7 @@ with tab_dashboard:
         total_tangki = len(df_tampil)
         
         if 'QTY' in df_tampil.columns:
-            df_tampil['QTY_NUM'] = pd.to_numeric(df_tampil['QTY'], errors='coerce').fillna(0)
+            df_tampil['QTY_NUM'] = pd.to_numeric(df_tampil['QTY'].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
             total_volume = df_tampil['QTY_NUM'].sum()
         else:
             total_volume = 0
@@ -269,14 +282,14 @@ with tab_input:
     with kolom_form1:
         st.markdown("**1. Info Utama**")
         
-        idx_reagent = get_index(["-- Pilih Reagent --", "ACID", "ESCAID", "LAINNYA"], exist_data.get('Jenis Reagent', ''))
+        idx_reagent = get_index(["-- Pilih Reagent --", "ACID", "ESCAID", "LAINNYA"], exist_data.get('Jenis Reagent', exist_data.get('REAGENT', '')))
         input_reagent = st.selectbox("Jenis Reagent / Acid (Wajib)", ["-- Pilih Reagent --", "ACID", "ESCAID", "LAINNYA"], index=idx_reagent)
         
         idx_vendor = get_index(opsi_vendor, exist_data.get('Vendor', ''))
         input_vendor = st.selectbox("Vendor (Wajib)", opsi_vendor, index=idx_vendor)
         
-        # Tampilkan QTY lama jika ada
-        qty_awal = float(exist_data.get('QTY', 0.0)) if ditemukan else 0.0
+        # Konversi QTY dengan safe_float agar bebas error string/kosong
+        qty_awal = safe_float(exist_data.get('QTY', 0.0)) if ditemukan else 0.0
         input_qty = st.number_input("QTY (dalam KG)", min_value=0.0, value=qty_awal, step=1.0, format="%.2f")
         
     with kolom_form2:
@@ -288,7 +301,8 @@ with tab_input:
         idx_lokasi = get_index(opsi_lokasi, exist_data.get('LOCATION', ''))
         input_lokasi = st.selectbox("LOCATION (Wajib)", opsi_lokasi, index=idx_lokasi)
         
-        qty_issued_awal = float(exist_data.get('QTY ISSUED', 0.0)) if ditemukan else 0.0
+        # Konversi QTY ISSUED dengan aman
+        qty_issued_awal = safe_float(exist_data.get('QTY ISSUED', 0.0)) if ditemukan else 0.0
         input_qty_issued = st.number_input("QTY ISSUED (KG)", min_value=0.0, value=qty_issued_awal, step=1.0, format="%.2f")
         
         input_date_empty = st.date_input("Date Empty", value=konversi_ke_date(exist_data.get('Date Empty', '')))
@@ -301,7 +315,8 @@ with tab_input:
         input_po_in = st.text_input("PO IN", value=str(exist_data.get('PO IN', '')) if ditemukan else "")
         input_pr_po_out = st.text_input("PR/PO OUT", value=str(exist_data.get('PR/PO OUT', '')) if ditemukan else "")
         
-        qty_pr_awal = float(exist_data.get('QTY PR', 0.0)) if ditemukan else 0.0
+        # Konversi QTY PR dengan aman
+        qty_pr_awal = safe_float(exist_data.get('QTY PR', 0.0)) if ditemukan else 0.0
         input_qty_pr = st.number_input("QTY PR (KG)", min_value=0.0, value=qty_pr_awal, step=1.0, format="%.2f")
         
         input_cm_out = st.text_input("CM OUT", value=str(exist_data.get('CM OUT', '')) if ditemukan else "")
