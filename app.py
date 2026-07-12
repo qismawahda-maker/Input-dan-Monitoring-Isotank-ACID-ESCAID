@@ -41,6 +41,14 @@ st.markdown("""
         .stDataFrame div {
             font-size: 16px !important;
         }
+          /* ==========================================
+           KODE CSS UNTUK MENYEMBUNYIKAN IKON GITHUB
+           ========================================== */
+        .stActionButton:has(a[href*="github.com"]) {
+            display: none !important;
+        }
+        /* Opsi tambahan untuk menyembunyikan seluruh menu toolbar atas jika diperlukan */
+        /* [data-testid="stToolbar"] { visibility: hidden !important; } */
     </style>
 """, unsafe_allow_html=True)
 
