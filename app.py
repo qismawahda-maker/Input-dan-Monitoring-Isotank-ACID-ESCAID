@@ -10,16 +10,13 @@ from google.oauth2.service_account import Credentials
 st.set_page_config(page_title="Dashboard Isotank", page_icon="🛢️", layout="wide")
 st.title("🛢️ Sistem Monitoring Isotank (Google Sheets)")
 
-# URL Google Sheets Anda
 SPREADSHEET_URL = 'https://docs.google.com/spreadsheets/d/1eX12pN5sfohdIlEOWKNMv2Cj80lTRvxp0k8H-zcd4DI/edit?gid=0#gid=0'
-
-# Nama Sheet (Tab di bagian bawah Google Sheets). 
-# Jika error, pastikan di Google Sheets tidak ada spasi lebih pada nama tab-nya.
 NAMA_SHEET = 'ACID & ESCAID STATUS ' 
 
 # ==========================================
-# 2. FUNGSI KONEKSI KE GOOGLE SHEETS
+# 2. FUNGSI KONEKSI (Menggunakan Cache Resource)
 # ==========================================
+@st.cache_resource
 def get_gsheets_connection():
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets",
@@ -31,7 +28,7 @@ def get_gsheets_connection():
     return client
 
 # ==========================================
-# 3. FUNGSI AMBIL DATA DARI GOOGLE SHEETS
+# 3. FUNGSI AMBIL DATA (Hanya Data, bukan Koneksi)
 # ==========================================
 @st.cache_data(ttl=5)
 def ambil_data():
@@ -42,7 +39,7 @@ def ambil_data():
         data_mentah = sheet.get_all_values()
         
         if not data_mentah or len(data_mentah) < 2:
-            return pd.DataFrame(), sheet
+            return pd.DataFrame()
             
         # Asumsi: Baris pertama di Spreadsheet (Baris 1) adalah judul kolom
         df = pd.DataFrame(data_mentah[1:], columns=data_mentah[0])
@@ -51,12 +48,12 @@ def ambil_data():
         if 'TANK ID' in df.columns:
             df = df[df['TANK ID'].astype(str).str.strip() != '']
             
-        return df, sheet
+        return df
     except Exception as e:
-        st.error(f"❌ Gagal membaca Google Sheets. Pastikan Nama Sheet benar & Bot diundang sebagai Editor! Detail: {e}")
-        return pd.DataFrame(), None
+        st.error(f"❌ Gagal membaca Google Sheets. Detail: {e}")
+        return pd.DataFrame()
 
-df, worksheet = ambil_data()
+df = ambil_data()
 
 # ==========================================
 # 4. TAMPILAN DASHBOARD & FORM INPUT
@@ -111,7 +108,6 @@ with tab_dashboard:
                 st.plotly_chart(fig2, use_container_width=True)
                 
         st.subheader("Data Detail")
-        # Sembunyikan kolom bantuan perhitungan QTY sebelum ditampilkan
         if 'QTY_NUM' in df.columns:
             df = df.drop(columns=['QTY_NUM'])
         st.dataframe(df, use_container_width=True, hide_index=True)
@@ -154,16 +150,18 @@ with tab_input:
         if tombol_simpan:
             if input_tank_id.strip() == "":
                 st.error("Gagal: TANK ID tidak boleh kosong!")
-            elif worksheet is None:
-                st.error("Gagal terhubung ke Google Sheets. Cek pesan error di Dashboard.")
             else:
                 try:
-                    # Mengubah format tanggal menjadi teks yang mudah dibaca Excel/Sheets
+                    # Membuka koneksi baru HANYA saat mau input data
+                    client = get_gsheets_connection()
+                    worksheet = client.open_by_url(SPREADSHEET_URL).worksheet(NAMA_SHEET)
+                    
+                    # Mengubah format tanggal menjadi teks
                     str_date_empty = input_date_empty.strftime("%Y-%m-%d") if input_date_empty else ""
                     str_date_in = input_date_in.strftime("%Y-%m-%d") if input_date_in else ""
                     str_date_out = input_date_out.strftime("%Y-%m-%d") if input_date_out else ""
                     
-                    # ⚠️ SUSUNAN INI HARUS SAMA DENGAN URUTAN KOLOM DI SPREADSHEET ANDA
+                    # Susunan kolom yang akan dikirim
                     baris_baru = [
                         input_vendor, input_tank_id, input_qty, input_uom, 
                         input_status, input_lokasi, input_qty_issued, str_date_empty, 
@@ -171,9 +169,11 @@ with tab_input:
                         input_pr_po_out, input_qty_pr, input_cm_out, str_date_out
                     ]
                     
-                    # Tambahkan data ke baris paling bawah
+                    # Menggunakan append_rows untuk menghindari bug versi lama
                     worksheet.append_rows([baris_baru])
-                    st.cache_data.clear() # Refresh memori
-                    st.success(f"Berhasil! Data tangki {input_tank_id} telah tersimpan di Google Sheets.")
+                    
+                    # Refresh aplikasi agar tabel di Dashboard langsung ter-update
+                    st.cache_data.clear() 
+                    st.success(f"Berhasil! Data tangki {input_tank_id} telah meluncur ke Google Sheets.")
                 except Exception as e:
                     st.error(f"Gagal saat menyimpan data: {e}")
