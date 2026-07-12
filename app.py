@@ -5,10 +5,54 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 # ==========================================
-# 1. KONFIGURASI AWAL
+# 1. KONFIGURASI AWAL & CUSTOM CSS FONT
 # ==========================================
-st.set_page_config(page_title="MONITORING ISOTANK ACID & ESCAID", page_icon="🛢️", layout="wide")
-st.title("🛢️ MONITORING ISOTANK ACID DAN ESCAID")
+st.set_page_config(page_title="MONITORING ISOTANK", page_icon="🛢️", layout="wide")
+
+# --- KODE CUSTOM CSS UNTUK MEMPERBESAR FONT ---
+st.markdown("""
+    <style>
+        /* Ukuran font untuk Judul Utama */
+        .main-title {
+            font-size: 42px !important;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+        /* Ukuran font untuk Subheader / Judul Bagian */
+        .stMarkdown h3, .stMarkdown h5 {
+            font-size: 26px !important;
+            font-weight: bold !important;
+        }
+        /* Ukuran font untuk Label pada Filter Dropdown & Input */
+        .stSelectbox label, .stTextInput label, .stNumberInput label {
+            font-size: 20px !important;
+            font-weight: 500 !important;
+        }
+        /* Ukuran font untuk teks di dalam Dropdown & Input */
+        .stSelectbox div, .stTextInput div, .stNumberInput div {
+            font-size: 18px !important;
+        }
+        /* Ukuran font untuk Teks Menu Tabs (Dashboard / Input) */
+        .stTabs button {
+            font-size: 22px !important;
+        }
+        /* Ukuran teks angka pada kartu KPI */
+        [data-testid="stMetricValue"] {
+            font-size: 36px !important;
+        }
+        /* Ukuran teks label kecil pada kartu KPI */
+        [data-testid="stMetricLabel"] {
+            font-size: 18px !important;
+        }
+        /* Ukuran font untuk Tabel Data Detail */
+        .stDataFrame div {
+            font-size: 16px !important;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
+# Menggunakan class HTML khusus untuk judul utama agar CSS di atas berjalan
+st.markdown('<div class="main-title">🛢️ MONITORING ISOTANK</div>', unsafe_allow_html=True)
 
 SPREADSHEET_URL = 'https://docs.google.com/spreadsheets/d/1eX12pN5sfohdIlEOWKNMv2Cj80lTRvxp0k8H-zcd4DI/edit?gid=0#gid=0'
 NAMA_SHEET = 'ACID & ESCAID STATUS ' 
@@ -64,13 +108,9 @@ with tab_dashboard:
     if df.empty:
         st.warning("⚠️ Data kosong. Pastikan baris ke-1 di Spreadsheet Anda berisi judul kolom.")
     else:
-        # ==========================================
-        # FILTER PENCARIAN (Bertingkat)
-        # ==========================================
+        # FILTER PENCARIAN
         st.markdown("### 🔍 Filter Pencarian")
         
-        # 1. Filter Utama: By Reagent (Satu kolom penuh di atas)
-        # Kita cari nama kolom yang mengandung kata 'Reagent' (berjaga-jaga jika salah ketik)
         kolom_reagent = next((col for col in df.columns if 'REAGENT' in str(col).upper()), None)
         
         filter_reagent = "Semua Reagent"
@@ -80,7 +120,6 @@ with tab_dashboard:
         else:
             st.info("💡 Kolom 'Jenis Reagent' belum terbaca. Pastikan Anda sudah memberi judul kolom tersebut di GSheets.")
 
-        # 2. Filter Sekunder: Vendor, Status, Lokasi (3 Kolom sejajar di bawahnya)
         col_filter1, col_filter2, col_filter3 = st.columns(3)
         
         with col_filter1:
@@ -98,11 +137,9 @@ with tab_dashboard:
         # Menerapkan Filter ke Data
         df_tampil = df.copy()
         
-        # Eksekusi Filter Reagent
         if kolom_reagent and filter_reagent != "Semua Reagent":
             df_tampil = df_tampil[df_tampil[kolom_reagent].astype(str).str.upper() == filter_reagent]
             
-        # Eksekusi Filter Lainnya
         if filter_vendor != "Semua Vendor":
             df_tampil = df_tampil[df_tampil['Vendor'].astype(str) == filter_vendor]
         if filter_status != "Semua Status":
@@ -112,12 +149,10 @@ with tab_dashboard:
 
         st.divider()
 
-        # ==========================================
-        # RINGKASAN DATA & GRAFIK
-        # ==========================================
+        # RINGKASAN DATA
         st.subheader("Ringkasan Kondisi Tangki")
-        col1, col2, col3, col4 = st.columns(4)
         
+        col_tot1, col_tot2 = st.columns(2)
         total_tangki = len(df_tampil)
         
         if 'QTY' in df_tampil.columns:
@@ -126,19 +161,29 @@ with tab_dashboard:
         else:
             total_volume = 0
             
-        if 'STATUS' in df_tampil.columns:
-            jml_full = len(df_tampil[df_tampil['STATUS'].astype(str).str.upper() == 'FULL'])
-            jml_empty = len(df_tampil[df_tampil['STATUS'].astype(str).str.upper() == 'EMPTY'])
-        else:
-            jml_full, jml_empty = 0, 0
+        col_tot1.metric("Total Keseluruhan Unit Isotank", total_tangki)
+        col_tot2.metric("Total Keseluruhan Volume (QTY)", f"{total_volume:,.0f}")
         
-        col1.metric("Total Unit Isotank", total_tangki)
-        col2.metric("Total Volume (QTY)", f"{total_volume:,.0f}")
-        col3.metric("Status FULL", jml_full)
-        col4.metric("Status EMPTY", jml_empty)
+        st.markdown("##### Rincian Status Tangki")
+        c1, c2, c3, c4 = st.columns(4)
+        
+        if 'STATUS' in df_tampil.columns:
+            status_series = df_tampil['STATUS'].astype(str).str.upper()
+            jml_full = len(status_series[status_series == 'FULL'])
+            jml_empty = len(status_series[status_series == 'EMPTY'])
+            jml_install = len(status_series[status_series == 'INSTALL'])
+            jml_vendor = len(status_series[status_series == 'VENDOR'])
+        else:
+            jml_full = jml_empty = jml_install = jml_vendor = 0
+            
+        c1.metric("Status FULL", jml_full)
+        c2.metric("Status EMPTY", jml_empty)
+        c3.metric("Status INSTALL", jml_install)
+        c4.metric("Status VENDOR", jml_vendor)
         
         st.divider()
         
+        # GRAFIK VISUAL
         kolom_grafik1, kolom_grafik2 = st.columns(2)
         with kolom_grafik1:
             st.markdown("**Perbandingan Status Tangki**")
@@ -176,14 +221,13 @@ with tab_input:
             st.markdown("**1. Info Utama**")
             input_vendor = st.text_input("Vendor")
             input_tank_id = st.text_input("TANK ID (Wajib Diisi)")
-            # Input Baru: Jenis Reagent
             input_reagent = st.selectbox("Jenis Reagent", ["ACID", "ESCAID", "LAINNYA"])
             input_qty = st.number_input("QTY", min_value=0.0)
             input_uom = st.selectbox("UoM", ["KG", "LITER"])
             
         with kolom_form2:
             st.markdown("**2. Info Status & Masuk**")
-            input_status = st.selectbox("STATUS", ["FULL", "EMPTY"])
+            input_status = st.selectbox("STATUS", ["FULL", "EMPTY", "INSTALL", "VENDOR"])
             input_lokasi = st.selectbox("LOCATION", ["WAREHOUSE", "OUTBOUND", "INBOUND", "25KT"])
             input_qty_issued = st.number_input("QTY ISSUED", min_value=0.0)
             input_date_empty = st.date_input("Date Empty", value=None)
@@ -214,13 +258,12 @@ with tab_input:
                     str_date_in = input_date_in.strftime("%Y-%m-%d") if input_date_in else ""
                     str_date_out = input_date_out.strftime("%Y-%m-%d") if input_date_out else ""
                     
-                    # Kolom Q (Index ke-16) adalah letak input_reagent
                     baris_baru = [
                         input_vendor, input_tank_id, input_qty, input_uom, 
                         input_status, input_lokasi, input_qty_issued, str_date_empty, 
                         input_ps, input_cm_in, str_date_in, input_po_in, 
                         input_pr_po_out, input_qty_pr, input_cm_out, str_date_out,
-                        input_reagent  # <--- Ini akan otomatis masuk ke Kolom Q
+                        input_reagent
                     ]
                     
                     worksheet.append_rows([baris_baru])
