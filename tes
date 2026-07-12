@@ -1,1 +1,122 @@
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+from openpyxl import load_workbook
+import os
 
+# --- KONFIGURASI HALAMAN ---
+st.set_page_config(page_title="Dashboard Isotank", page_icon="🛢️", layout="wide")
+st.title("🛢️ Dashboard Status Isotank (Acid & Escaid)")
+
+# --- VARIABEL FILE ---
+# Sesuaikan dengan nama file Excel Anda yang sebenarnya
+FILE_PATH = 'WEEKLY STOCK TAKE ISOTANK 01 - 07 JULY 2026_2.xlsx'
+SHEET_NAME = 'ACID & ESCAID STATUS '
+
+# --- FUNGSI MEMBACA DATA ---
+@st.cache_data(ttl=5) # Cache direfresh agar data baru langsung muncul
+def load_data():
+    if not os.path.exists(FILE_PATH):
+        st.error(f"File {FILE_PATH} tidak ditemukan!")
+        return pd.DataFrame()
+    
+    # Membaca data dari Excel
+    # Catatan: Sesuaikan skiprows=3 jika header tabel Anda tidak berada di baris pertama
+    df = pd.read_excel(FILE_PATH, sheet_name=SHEET_NAME, skiprows=3) 
+    
+    # Membersihkan baris yang kosong (memastikan TANK ID terisi)
+    df = df.dropna(subset=['TANK ID'])
+    return df
+
+df = load_data()
+
+# --- MEMBUAT TABS (VIEW & SUBMIT) ---
+tab_dashboard, tab_input = st.tabs(["📊 View Dashboard", "📝 Submit Data Baru"])
+
+# ==========================================
+# TAB 1: VIEW DASHBOARD
+# ==========================================
+with tab_dashboard:
+    if not df.empty:
+        # 1. KARTU KPI (Key Performance Indicators)
+        st.subheader("Ringkasan Data Utama")
+        col1, col2, col3, col4 = st.columns(4)
+        
+        total_tangki = len(df)
+        total_qty = df['QTY'].sum()
+        tangki_full = len(df[df['STATUS'].str.upper() == 'FULL'])
+        tangki_empty = len(df[df['STATUS'].str.upper() == 'EMPTY'])
+        
+        col1.metric("Total Isotank", total_tangki)
+        col2.metric("Total QTY (KG)", f"{total_qty:,.0f}")
+        col3.metric("Status FULL", tangki_full)
+        col4.metric("Status EMPTY", tangki_empty)
+        
+        st.markdown("---")
+        
+        # 2. GRAFIK (CHART)
+        col_chart1, col_chart2 = st.columns(2)
+        
+        with col_chart1:
+            st.write("**Persentase Status Tangki**")
+            status_counts = df['STATUS'].value_counts().reset_index()
+            status_counts.columns = ['STATUS', 'Jumlah']
+            fig_pie = px.pie(status_counts, names='STATUS', values='Jumlah', hole=0.4, color='STATUS')
+            st.plotly_chart(fig_pie, use_container_width=True)
+            
+        with col_chart2:
+            st.write("**Distribusi Lokasi Tangki**")
+            loc_counts = df['LOCATION'].value_counts().reset_index()
+            loc_counts.columns = ['LOCATION', 'Jumlah']
+            fig_bar = px.bar(loc_counts, x='LOCATION', y='Jumlah', color='LOCATION')
+            st.plotly_chart(fig_bar, use_container_width=True)
+            
+        # 3. TABEL DATA MENTAH
+        st.subheader("Data Detail Tangki")
+        st.dataframe(df, use_container_width=True)
+
+# ==========================================
+# TAB 2: SUBMIT DATA BARU
+# ==========================================
+with tab_input:
+    st.subheader("Formulir Input Data Isotank")
+    
+    # Menggunakan st.form agar halaman tidak ter-refresh sebelum tombol diklik
+    with st.form("form_input_data", clear_on_submit=True):
+        col_form1, col_form2 = st.columns(2)
+        
+        with col_form1:
+            input_vendor = st.text_input("Vendor (Contoh: ROLIMEX, ADIMITRA)")
+            input_tank = st.text_input("TANK ID (Contoh: SJIU2522988)")
+            input_qty = st.number_input("QTY (Jumlah)", min_value=0.0, step=100.0)
+            
+        with col_form2:
+            input_uom = st.selectbox("Satuan (UoM)", ["KG", "LITER"])
+            input_status = st.selectbox("Status", ["FULL", "EMPTY"])
+            input_location = st.selectbox("Lokasi", ["WAREHOUSE", "OUTBOUND", "INBOUND", "25KT"])
+            
+        submit_button = st.form_submit_button("Simpan Data")
+        
+        if submit_button:
+            if input_tank == "":
+                st.error("Gagal: TANK ID wajib diisi!")
+            else:
+                try:
+                    # Membuka file excel tanpa merusak format bawaan
+                    wb = load_workbook(FILE_PATH)
+                    ws = wb[SHEET_NAME]
+                    
+                    # Mencari baris kosong terakhir (berdasarkan struktur Excel Anda)
+                    # Asumsi kolom input berurutan: Vendor(C), Tank ID(D), QTY(E), UoM(F), STATUS(G), LOCATION(H)
+                    # Sesuaikan index append ini dengan posisi riil di Excel Anda
+                    new_row = [None, None, input_vendor, input_tank, input_qty, input_uom, input_status, input_location]
+                    ws.append(new_row)
+                    
+                    # Menyimpan file
+                    wb.save(FILE_PATH)
+                    
+                    # Membersihkan cache Streamlit agar data baru terbaca
+                    st.cache_data.clear()
+                    st.success(f"Data tangki {input_tank} berhasil ditambahkan!")
+                except Exception as e:
+                    st.error(f"Terjadi kesalahan saat menyimpan: {e}")
