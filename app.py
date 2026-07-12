@@ -172,7 +172,7 @@ with tab_input:
                     ]
                     
                     # Tambahkan data ke baris paling bawah
-                    worksheet.append_row(baris_baru)
+                    worksheet.append_rows([baris_baru])
                     st.cache_data.clear() # Refresh memori
                     st.success(f"Berhasil! Data tangki {input_tank_id} telah tersimpan di Google Sheets.")
                 except Exception as e:
