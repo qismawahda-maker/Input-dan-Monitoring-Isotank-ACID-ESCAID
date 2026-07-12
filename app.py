@@ -231,17 +231,37 @@ with tab_input:
         
         with kolom_form1:
             st.markdown("**1. Info Utama**")
-            input_vendor = st.text_input("Vendor")
+            
+            # Dropdown Vendor
+            if not df.empty and 'Vendor' in df.columns:
+                opsi_vendor = ["-- Pilih Vendor --"] + sorted(df['Vendor'].astype(str).unique().tolist())
+            else:
+                opsi_vendor = ["-- Pilih Vendor --", "ROLIMEX", "DWIJAYA", "ENERGI JAYA INOVASI PT", "ADIMITRA"]
+            input_vendor = st.selectbox("Vendor (Wajib)", opsi_vendor)
+            
+            # Input TANK ID
             input_tank_id = st.text_input("TANK ID (Wajib Diisi)")
-            input_reagent = st.selectbox("Jenis Reagent", ["ACID", "ESCAID", "LAINNYA"])
-            input_qty = st.number_input("QTY", min_value=0.0)
-            input_uom = st.selectbox("UoM", ["KG", "LITER"])
+            
+            # Dropdown Jenis Reagent / Acid
+            input_reagent = st.selectbox("Jenis Reagent / Acid (Wajib)", ["-- Pilih Reagent --", "ACID", "ESCAID", "LAINNYA"])
+            
+            # Input QTY Manual (Murni Angka KG, Tanpa Dropdown UoM)
+            input_qty = st.number_input("QTY (dalam KG)", min_value=0.0, step=1.0, format="%.2f")
             
         with kolom_form2:
             st.markdown("**2. Info Status & Masuk**")
-            input_status = st.selectbox("STATUS", ["FULL", "EMPTY", "INSTALL", "VENDOR"])
-            input_lokasi = st.selectbox("LOCATION", ["WAREHOUSE", "OUTBOUND", "INBOUND", "25KT"])
-            input_qty_issued = st.number_input("QTY ISSUED", min_value=0.0)
+            
+            # Dropdown Status
+            input_status = st.selectbox("STATUS (Wajib)", ["-- Pilih Status --", "FULL", "EMPTY", "INSTALL", "VENDOR"])
+            
+            # Dropdown Location
+            if not df.empty and 'LOCATION' in df.columns:
+                opsi_lokasi = ["-- Pilih Lokasi --"] + sorted(df['LOCATION'].astype(str).unique().tolist())
+            else:
+                opsi_lokasi = ["-- Pilih Lokasi --", "WAREHOUSE", "OUTBOUND", "INBOUND", "25KT", "INBOUND- KOE WTR", "INBOUND - SUB KOE"]
+            input_lokasi = st.selectbox("LOCATION (Wajib)", opsi_lokasi)
+            
+            input_qty_issued = st.number_input("QTY ISSUED (KG)", min_value=0.0, step=1.0, format="%.2f")
             input_date_empty = st.date_input("Date Empty", value=None)
             input_ps = st.text_input("PS")
             input_cm_in = st.text_input("CM IN")
@@ -251,10 +271,50 @@ with tab_input:
             input_date_in = st.date_input("DATE IN", value=None)
             input_po_in = st.text_input("PO IN")
             input_pr_po_out = st.text_input("PR/PO OUT")
-            input_qty_pr = st.number_input("QTY PR", min_value=0.0)
+            input_qty_pr = st.number_input("QTY PR (KG)", min_value=0.0, step=1.0, format="%.2f")
             input_cm_out = st.text_input("CM OUT")
             input_date_out = st.date_input("DATE OUT", value=None)
             
+        st.markdown("---")
+        tombol_simpan = st.form_submit_button("Simpan ke Google Sheets")
+        
+        # ==========================================
+        # VALIDASI WAJIB DIISI SEBELUM DISIMPAN
+        # ==========================================
+        if tombol_simpan:
+            if input_vendor == "-- Pilih Vendor --":
+                st.error("❌ Gagal: Kolom 'Vendor' harus dipilih!")
+            elif input_tank_id.strip() == "":
+                st.error("❌ Gagal: Kolom 'TANK ID' tidak boleh kosong!")
+            elif input_reagent == "-- Pilih Reagent --":
+                st.error("❌ Gagal: Kolom 'Jenis Reagent / Acid' harus dipilih!")
+            elif input_status == "-- Pilih Status --":
+                st.error("❌ Gagal: Kolom 'STATUS' harus dipilih!")
+            elif input_lokasi == "-- Pilih Lokasi --":
+                st.error("❌ Gagal: Kolom 'LOCATION' harus dipilih!")
+            else:
+                try:
+                    client = get_gsheets_connection()
+                    worksheet = client.open_by_url(SPREADSHEET_URL).worksheet(NAMA_SHEET)
+                    
+                    str_date_empty = input_date_empty.strftime("%Y-%m-%d") if input_date_empty else ""
+                    str_date_in = input_date_in.strftime("%Y-%m-%d") if input_date_in else ""
+                    str_date_out = input_date_out.strftime("%Y-%m-%d") if input_date_out else ""
+                    
+                    # Kolom UoM (index ke-4 setelah input_qty) otomatis diisi teks "KG"
+                    baris_baru = [
+                        input_vendor, input_tank_id, input_qty, "KG", 
+                        input_status, input_lokasi, input_qty_issued, str_date_empty, 
+                        input_ps, input_cm_in, str_date_in, input_po_in, 
+                        input_pr_po_out, input_qty_pr, input_cm_out, str_date_out,
+                        input_reagent
+                    ]
+                    
+                    worksheet.append_rows([baris_baru])
+                    st.cache_data.clear() 
+                    st.success(f"🎉 Berhasil! Data tangki {input_tank_id} dengan satuan KG telah tersimpan secara manual ke Google Sheets.")
+                except Exception as e:
+                    st.error(f"❌ Gagal saat menyimpan data: {e}")
         st.markdown("---")
         tombol_simpan = st.form_submit_button("Simpan ke Google Sheets")
         
