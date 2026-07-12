@@ -190,10 +190,12 @@ with tab_dashboard:
         
         st.divider()
 
-        # GRAFIK VISUAL
+        # ==========================================
+        # GRAFIK VISUAL (UKURAN ANGKA & FONT DIPERBESAR)
+        # ==========================================
         kolom_grafik1, kolom_grafik2 = st.columns(2)
         with kolom_grafik1:
-            st.markdown("**Perbandingan Status Tangki**")
+            st.markdown("**Perbandingan Status Tangki Keseluruhan**")
             if 'STATUS' in df_tampil.columns and total_tangki > 0:
                 data_status = df_tampil['STATUS'].value_counts().reset_index()
                 data_status.columns = ['Status', 'Jumlah']
@@ -204,15 +206,47 @@ with tab_dashboard:
                 st.info("Tidak ada data untuk grafik ini.")
                 
         with kolom_grafik2:
-            st.markdown("**Posisi Lokasi Tangki**")
-            if 'LOCATION' in df_tampil.columns and total_tangki > 0:
-                data_lokasi = df_tampil['LOCATION'].value_counts().reset_index()
-                data_lokasi.columns = ['Lokasi', 'Jumlah']
-                fig2 = px.bar(data_lokasi, x='Lokasi', y='Jumlah', color='Lokasi', text='Jumlah')
-                fig2.update_traces(textposition='inside')
+            st.markdown("**Rincian Status Tangki di Setiap Lokasi**")
+            if 'LOCATION' in df_tampil.columns and 'STATUS' in df_tampil.columns and total_tangki > 0:
+                # Mengelompokkan data berdasarkan kombinasi LOKASI dan STATUS
+                data_lokasi_status = df_tampil.groupby(['LOCATION', 'STATUS']).size().reset_index(name='Jumlah')
+                data_lokasi_status.columns = ['Lokasi', 'Status', 'Jumlah']
+                
+                # Membuat grafik batang berkelompok
+                fig2 = px.bar(
+                    data_lokasi_status, 
+                    x='Lokasi', 
+                    y='Jumlah', 
+                    color='Status',      
+                    barmode='group',     
+                    text='Jumlah',
+                    labels={'Jumlah': 'Jumlah Tangki'}
+                )
+                
+                # 1. Memperbesar tulisan angka di atas batang tangki
+                fig2.update_traces(
+                    textposition='outside', 
+                    textfont_size=20,       # << Ukuran angka di atas batang menjadi 20px (Sangat Jelas)
+                    textfont_color='white'  # Menyesuaikan warna teks angka agar kontras dengan background gelap
+                )
+                
+                # 2. Memperbesar tulisan Label Sumbu X, Y, Judul, dan Legenda
+                fig2.update_layout(
+                    xaxis_title="Lokasi",
+                    yaxis_title="Jumlah Unit Isotank",
+                    legend_title="Status Tangki",
+                    font=dict(
+                        size=16             # << Ukuran font teks label sumbu & legenda diperbesar jadi 16px
+                    ),
+                    xaxis=dict(tickfont=dict(size=14)), # Ukuran teks nama lokasi di sumbu X
+                    yaxis=dict(tickfont=dict(size=14)), # Ukuran teks angka di sumbu Y
+                    # Memaksa teks angka tetap besar dan tidak mengecil otomatis oleh plotly
+                    uniformtext=dict(mode='hide', minsize=18) 
+                )
+                
                 st.plotly_chart(fig2, use_container_width=True)
             else:
-                st.info("Tidak ada data untuk grafik ini.")
+                st.info("Tidak ada data untuk grafik lokasi dan status.")
                 
         st.divider()
 
