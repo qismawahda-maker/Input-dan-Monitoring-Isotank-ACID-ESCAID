@@ -11,7 +11,7 @@ st.set_page_config(page_title="Dashboard Isotank", page_icon="🛢️", layout="
 st.title("🛢️ Sistem Monitoring Isotank (Google Sheets)")
 
 SPREADSHEET_URL = 'https://docs.google.com/spreadsheets/d/1eX12pN5sfohdIlEOWKNMv2Cj80lTRvxp0k8H-zcd4DI/edit?gid=0#gid=0'
-NAMA_SHEET = 'ACID & ESCAID STATUS ' 
+NAMA_SHEET = 'ACID & ESCAID STATUS' 
 
 # ==========================================
 # 2. FUNGSI KONEKSI (Menggunakan Cache Resource)
