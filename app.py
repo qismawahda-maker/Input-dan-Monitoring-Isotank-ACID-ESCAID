@@ -231,6 +231,9 @@ with tab_input:
         
         with kolom_form1:
             st.markdown("**1. Info Utama**")
+
+            # Dropdown Jenis Reagent / Acid
+            input_reagent = st.selectbox("Jenis Reagent / Acid (Wajib)", ["-- Pilih Reagent --", "ACID", "ESCAID", "LAINNYA"])
             
             # Dropdown Vendor
             if not df.empty and 'Vendor' in df.columns:
@@ -241,9 +244,6 @@ with tab_input:
             
             # Input TANK ID
             input_tank_id = st.text_input("TANK ID (Wajib Diisi)")
-            
-            # Dropdown Jenis Reagent / Acid
-            input_reagent = st.selectbox("Jenis Reagent / Acid (Wajib)", ["-- Pilih Reagent --", "ACID", "ESCAID", "LAINNYA"])
             
             # Input QTY Manual (Murni Angka KG, Tanpa Dropdown UoM)
             input_qty = st.number_input("QTY (dalam KG)", min_value=0.0, step=1.0, format="%.2f")
