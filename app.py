@@ -45,8 +45,6 @@ def ambil_data():
         
         if 'TANK ID' in df.columns:
             df = df[df['TANK ID'].astype(str).str.strip() != '']
-            
-            # FITUR: Hapus duplikat TANK ID, sisakan data yang paling baru/terbawah
             df = df.drop_duplicates(subset=['TANK ID'], keep='last')
             
         return df
@@ -66,9 +64,7 @@ with tab_dashboard:
     if df.empty:
         st.warning("⚠️ Data kosong. Pastikan baris ke-1 di Spreadsheet Anda berisi judul kolom.")
     else:
-        # ==========================================
-        # FITUR BARU: 3 FILTER PENCARIAN
-        # ==========================================
+        # FILTER PENCARIAN
         st.markdown("### 🔍 Filter Pencarian")
         col_filter1, col_filter2, col_filter3 = st.columns(3)
         
@@ -77,7 +73,6 @@ with tab_dashboard:
             filter_vendor = st.selectbox("Filter berdasarkan Vendor:", list_vendor)
             
         with col_filter2:
-            # Mengambil status unik dari data, berjaga-jaga jika ada status lain
             list_status = ["Semua Status"] + sorted(df['STATUS'].astype(str).str.upper().unique().tolist())
             filter_status = st.selectbox("Filter berdasarkan Status:", list_status)
             
@@ -85,7 +80,7 @@ with tab_dashboard:
             list_lokasi = ["Semua Lokasi"] + sorted(df['LOCATION'].astype(str).str.upper().unique().tolist())
             filter_lokasi = st.selectbox("Filter berdasarkan Lokasi:", list_lokasi)
 
-        # Menerapkan filter ke dalam data yang akan ditampilkan
+        # Menerapkan filter utama
         df_tampil = df.copy()
         if filter_vendor != "Semua Vendor":
             df_tampil = df_tampil[df_tampil['Vendor'].astype(str) == filter_vendor]
@@ -97,12 +92,12 @@ with tab_dashboard:
         st.divider()
 
         # ==========================================
-        # RINGKASAN DATA (Mengecualikan STOP REFILL)
+        # RINGKASAN DATA & GRAFIK (Tanpa STOP REFILL)
         # ==========================================
         st.subheader("Ringkasan Kondisi Tangki Aktif")
         col1, col2, col3, col4 = st.columns(4)
         
-        # Mengecualikan tangki dengan status STOP REFIL/STOP REFILL dari hitungan Unit & Volume
+        # ⚠️ df_aktif: Mengecualikan STOP REFILL dari KPI dan Grafik
         df_aktif = df_tampil[~df_tampil['STATUS'].astype(str).str.upper().str.contains('STOP REFIL', na=False)]
         
         total_tangki = len(df_aktif)
@@ -113,9 +108,9 @@ with tab_dashboard:
         else:
             total_volume = 0
             
-        if 'STATUS' in df_tampil.columns:
-            jml_full = len(df_tampil[df_tampil['STATUS'].astype(str).str.upper() == 'FULL'])
-            jml_empty = len(df_tampil[df_tampil['STATUS'].astype(str).str.upper() == 'EMPTY'])
+        if 'STATUS' in df_aktif.columns:
+            jml_full = len(df_aktif[df_aktif['STATUS'].astype(str).str.upper() == 'FULL'])
+            jml_empty = len(df_aktif[df_aktif['STATUS'].astype(str).str.upper() == 'EMPTY'])
         else:
             jml_full, jml_empty = 0, 0
         
@@ -126,14 +121,12 @@ with tab_dashboard:
         
         st.divider()
         
-        # ==========================================
-        # GRAFIK VISUAL
-        # ==========================================
         kolom_grafik1, kolom_grafik2 = st.columns(2)
         with kolom_grafik1:
             st.markdown("**Perbandingan Status Tangki**")
-            if 'STATUS' in df_tampil.columns and len(df_tampil) > 0:
-                data_status = df_tampil['STATUS'].value_counts().reset_index()
+            # Menggunakan df_aktif agar STOP REFILL hilang dari Pie Chart
+            if 'STATUS' in df_aktif.columns and len(df_aktif) > 0:
+                data_status = df_aktif['STATUS'].value_counts().reset_index()
                 data_status.columns = ['Status', 'Jumlah']
                 fig1 = px.pie(data_status, names='Status', values='Jumlah', hole=0.4)
                 st.plotly_chart(fig1, use_container_width=True)
@@ -142,21 +135,24 @@ with tab_dashboard:
                 
         with kolom_grafik2:
             st.markdown("**Posisi Lokasi Tangki**")
-            if 'LOCATION' in df_tampil.columns and len(df_tampil) > 0:
-                data_lokasi = df_tampil['LOCATION'].value_counts().reset_index()
+            # Menggunakan df_aktif agar lokasi STOP REFILL hilang dari Bar Chart
+            if 'LOCATION' in df_aktif.columns and len(df_aktif) > 0:
+                data_lokasi = df_aktif['LOCATION'].value_counts().reset_index()
                 data_lokasi.columns = ['Lokasi', 'Jumlah']
                 fig2 = px.bar(data_lokasi, x='Lokasi', y='Jumlah', color='Lokasi')
                 st.plotly_chart(fig2, use_container_width=True)
             else:
                 st.info("Tidak ada data untuk grafik ini.")
                 
-        # ==========================================
-        # TABEL DETAIL BAWAH
-        # ==========================================
+        # TABEL DETAIL BAWAH (Tetap menampilkan semua termasuk Stop Refill jika dicari)
         st.subheader("Data Detail Keseluruhan")
         st.markdown("*Tip: Anda bisa klik nama kolom di tabel ini untuk mengurutkan data.*")
         if 'QTY_NUM' in df_tampil.columns:
             df_tampil = df_tampil.drop(columns=['QTY_NUM'])
+        # Namun di tabel hapus juga QTY_NUM dari df_aktif agar tidak error jika dipanggil
+        if 'QTY_NUM' in df_aktif.columns:
+            df_aktif = df_aktif.drop(columns=['QTY_NUM'])
+            
         st.dataframe(df_tampil, use_container_width=True, hide_index=True)
 
 # --- BAGIAN FORM INPUT ---
@@ -172,7 +168,6 @@ with tab_input:
             input_tank_id = st.text_input("TANK ID (Wajib Diisi)")
             input_qty = st.number_input("QTY", min_value=0.0)
             input_uom = st.selectbox("UoM", ["KG", "LITER"])
-            # Menambahkan opsi STOP REFILL di form input
             input_status = st.selectbox("STATUS", ["FULL", "EMPTY", "STOP REFILL"])
             input_lokasi = st.selectbox("LOCATION", ["WAREHOUSE", "OUTBOUND", "INBOUND", "25KT"])
             
