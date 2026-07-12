@@ -249,7 +249,7 @@ with tab_input:
             input_qty = st.number_input("QTY (dalam KG)", min_value=0.0, step=1.0, format="%.2f")
             
         with kolom_form2:
-            st.markdown("**2. Info Status & Masuk**")
+            st.markdown("**2. Info Status**")
             
             # Dropdown Status
             input_status = st.selectbox("STATUS (Wajib)", ["-- Pilih Status --", "FULL", "EMPTY", "INSTALL", "VENDOR"])
