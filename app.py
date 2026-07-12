@@ -265,11 +265,11 @@ with tab_input:
             input_date_empty = st.date_input("Date Empty", value=None)
             input_ps = st.text_input("PS")
             input_cm_in = st.text_input("CM IN")
-            
-        with kolom_form3:
-            st.markdown("**3. Info Detail Keluar**")
             input_date_in = st.date_input("DATE IN", value=None)
             input_po_in = st.text_input("PO IN")
+            
+        with kolom_form3:
+            st.markdown("**3. Info Keluar**")
             input_pr_po_out = st.text_input("PR/PO OUT")
             input_qty_pr = st.number_input("QTY PR (KG)", min_value=0.0, step=1.0, format="%.2f")
             input_cm_out = st.text_input("CM OUT")
