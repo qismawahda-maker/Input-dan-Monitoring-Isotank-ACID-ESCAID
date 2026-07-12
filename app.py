@@ -7,8 +7,8 @@ from google.oauth2.service_account import Credentials
 # ==========================================
 # 1. KONFIGURASI AWAL
 # ==========================================
-st.set_page_config(page_title="MONITORING ISOTANK", page_icon="🛢️", layout="wide")
-st.title("🛢️ MONITORING ISOTANK")
+st.set_page_config(page_title="MONITORING ISOTANK ACID & ESCAID", page_icon="🛢️", layout="wide")
+st.title("🛢️ MONITORING ISOTANK ACID DAN ESCAID")
 
 SPREADSHEET_URL = 'https://docs.google.com/spreadsheets/d/1eX12pN5sfohdIlEOWKNMv2Cj80lTRvxp0k8H-zcd4DI/edit?gid=0#gid=0'
 NAMA_SHEET = 'ACID & ESCAID STATUS ' 
