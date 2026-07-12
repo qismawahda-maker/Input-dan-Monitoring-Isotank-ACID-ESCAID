@@ -41,14 +41,15 @@ st.markdown("""
         .stDataFrame div {
             font-size: 16px !important;
         }
-          /* ==========================================
-           KODE CSS UNTUK MENYEMBUNYIKAN IKON GITHUB
+        
+        /* ==========================================
+           KODE CSS AMPUH MENYEMBUNYIKAN MENU & IKON GITHUB
            ========================================== */
-        .stActionButton:has(a[href*="github.com"]) {
-            display: none !important;
-        }
-        /* Opsi tambahan untuk menyembunyikan seluruh menu toolbar atas jika diperlukan */
-        /* [data-testid="stToolbar"] { visibility: hidden !important; } */
+        #MainMenu {visibility: hidden;}
+        header {visibility: hidden;}
+        [data-testid="stToolbar"] {visibility: hidden !important; display: none !important;}
+        [data-testid="stHeader"] {visibility: hidden !important; display: none !important;}
+        .stDeployButton {display: none !important;}
     </style>
 """, unsafe_allow_html=True)
 
@@ -234,8 +235,8 @@ with tab_dashboard:
                 # 1. Memperbesar tulisan angka di atas batang tangki
                 fig2.update_traces(
                     textposition='outside', 
-                    textfont_size=15,       # << Ukuran angka di atas batang menjadi 20px (Sangat Jelas)
-                    textfont_color='white'  # Menyesuaikan warna teks angka agar kontras dengan background gelap
+                    textfont_size=15,       # << Ukuran angka di atas batang
+                    textfont_color='white'  # Menyesuaikan warna teks angka
                 )
                 
                 # 2. Memperbesar tulisan Label Sumbu X, Y, Judul, dan Legenda
@@ -244,11 +245,10 @@ with tab_dashboard:
                     yaxis_title="Jumlah Unit Isotank",
                     legend_title="Status Tangki",
                     font=dict(
-                        size=16             # << Ukuran font teks label sumbu & legenda diperbesar jadi 16px
+                        size=16             # << Ukuran font teks label sumbu & legenda diperbesar
                     ),
-                    xaxis=dict(tickfont=dict(size=14)), # Ukuran teks nama lokasi di sumbu X
-                    yaxis=dict(tickfont=dict(size=14)), # Ukuran teks angka di sumbu Y
-                    # Memaksa teks angka tetap besar dan tidak mengecil otomatis oleh plotly
+                    xaxis=dict(tickfont=dict(size=14)), 
+                    yaxis=dict(tickfont=dict(size=14)), 
                     uniformtext=dict(mode='hide', minsize=18) 
                 )
                 
