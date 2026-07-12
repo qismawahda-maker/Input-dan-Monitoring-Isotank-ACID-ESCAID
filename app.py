@@ -4,137 +4,120 @@ import plotly.express as px
 import os
 from openpyxl import load_workbook
 
-# -------------------------------------------------------------
-# 1. KONFIGURASI HALAMAN DAN VARIABEL UTAMA
-# -------------------------------------------------------------
+# ==========================================
+# 1. PENGATURAN AWAL
+# ==========================================
 st.set_page_config(page_title="Dashboard Isotank", page_icon="🛢️", layout="wide")
-st.title("🛢️ Dashboard & Input Data Isotank")
+st.title("🛢️ Sistem Monitoring Isotank")
 
-# NAMA FILE HARUS SAMA PERSIS dengan yang ada di GitHub Anda
-FILE_NAME = 'WEEKLY STOCK TAKE ISOTANK 01 - 07 JULY 2026.xlsx'
-SHEET_NAME = 'ACID & ESCAID STATUS '
+# Pastikan nama file ini SAMA PERSIS dengan yang di-upload ke GitHub
+FILE_EXCEL = 'WEEKLY STOCK TAKE ISOTANK 01 - 07 JULY 2026.xlsx'
+NAMA_SHEET = 'ACID & ESCAID STATUS '
 
-# -------------------------------------------------------------
-# 2. FUNGSI UNTUK MEMBACA DATA (VIEW)
-# -------------------------------------------------------------
-# Menggunakan @st.cache_data agar aplikasi tidak melambat saat membaca Excel berulang kali,
-# tetapi akan mengambil data terbaru (ttl=5 detik) jika ada perubahan.
-@st.cache_data(ttl=5)
-def get_data():
-    if not os.path.exists(FILE_NAME):
-        st.error(f"File {FILE_NAME} tidak ditemukan di repository!")
+# ==========================================
+# 2. FUNGSI AMBIL DATA DARI EXCEL
+# ==========================================
+@st.cache_data(ttl=2)
+def ambil_data():
+    # Cek apakah file excel ada di folder
+    if not os.path.exists(FILE_EXCEL):
+        st.error(f"❌ File Excel '{FILE_EXCEL}' tidak ditemukan di GitHub!")
         return pd.DataFrame()
     
-    # Membaca data. skiprows=3 karena berdasarkan screenshot, baris header ada di baris ke-4
-    df = pd.read_excel(FILE_NAME, sheet_name=SHEET_NAME, skiprows=3)
-    
-    # Mengambil kolom yang penting saja (B = TANK ID, C = QTY, D = UoM, E = STATUS, F = LOCATION)
-    # Sesuaikan nama kolom ini jika berbeda di file Excel Anda yang sebenarnya
     try:
-        df_clean = df[['Vendor', 'TANK ID', 'QTY', 'UoM', 'STATUS', 'LOCATION']].copy()
-        df_clean = df_clean.dropna(subset=['TANK ID']) # Hapus baris kosong yang tidak ada ID tangkinya
-        return df_clean
-    except KeyError:
-        st.error("Format header/kolom di Excel tidak sesuai dengan yang diharapkan kode. Pastikan header ada di baris ke-4 dan namanya persis 'Vendor', 'TANK ID', dll.")
+        # Membaca excel. skiprows=3 berarti kita mengabaikan 3 baris teratas (judul)
+        # dan mulai membaca dari baris ke-4 sebagai nama kolom.
+        df = pd.read_excel(FILE_EXCEL, sheet_name=NAMA_SHEET, skiprows=3)
+        
+        # Hapus baris yang kosong (yang tidak punya TANK ID)
+        df = df.dropna(subset=['TANK ID'])
         return df
+    except Exception as e:
+        st.error(f"❌ Terjadi kesalahan saat membaca Excel: {e}")
+        return pd.DataFrame()
 
-df = get_data()
+df = ambil_data()
 
-# -------------------------------------------------------------
-# 3. MEMBUAT DUA HALAMAN (TABS)
-# -------------------------------------------------------------
-tab1, tab2 = st.tabs(["📊 Dashboard Monitoring", "📝 Form Input Data Baru"])
+# ==========================================
+# 3. MEMBUAT TAMPILAN DASHBOARD & FORM
+# ==========================================
+tab_dashboard, tab_input = st.tabs(["📊 Lihat Dashboard", "📝 Input Data Baru"])
 
-# =============================================================
-# TAB 1: DASHBOARD (VIEW DATA)
-# =============================================================
-with tab1:
-    if not df.empty:
-        # A. Bagian Kartu KPI (Ringkasan Angka)
-        st.subheader("Ringkasan Data Saat Ini")
-        kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+# --- BAGIAN DASHBOARD ---
+with tab_dashboard:
+    if df.empty:
+        st.warning("Data kosong atau belum terbaca.")
+    else:
+        st.subheader("Ringkasan Kondisi Tangki")
         
+        # Membuat 4 Kotak Angka
+        col1, col2, col3, col4 = st.columns(4)
         total_tangki = len(df)
-        total_qty = df['QTY'].sum()
-        tangki_full = len(df[df['STATUS'].astype(str).str.upper() == 'FULL'])
-        tangki_empty = len(df[df['STATUS'].astype(str).str.upper() == 'EMPTY'])
+        total_volume = df['QTY'].sum()
+        jml_full = len(df[df['STATUS'].astype(str).str.upper() == 'FULL'])
+        jml_empty = len(df[df['STATUS'].astype(str).str.upper() == 'EMPTY'])
         
-        kpi1.metric("Total Isotank", total_tangki)
-        kpi2.metric("Total Volume (KG)", f"{total_qty:,.0f}")
-        kpi3.metric("Status FULL", tangki_full)
-        kpi4.metric("Status EMPTY", tangki_empty)
+        col1.metric("Total Unit Isotank", total_tangki)
+        col2.metric("Total Volume (KG)", f"{total_volume:,.0f}")
+        col3.metric("Status FULL", jml_full)
+        col4.metric("Status EMPTY", jml_empty)
         
-        st.markdown("---")
+        st.divider()
         
-        # B. Bagian Grafik Interaktif
-        col_grafik1, col_grafik2 = st.columns(2)
-        
-        with col_grafik1:
-            st.markdown("**Persentase Status Tangki**")
-            status_df = df['STATUS'].value_counts().reset_index()
-            status_df.columns = ['Status', 'Jumlah']
-            fig_pie = px.pie(status_df, names='Status', values='Jumlah', hole=0.3, color='Status')
-            st.plotly_chart(fig_pie, use_container_width=True)
+        # Membuat Grafik
+        kolom_grafik1, kolom_grafik2 = st.columns(2)
+        with kolom_grafik1:
+            st.markdown("**Perbandingan Status (FULL vs EMPTY)**")
+            data_status = df['STATUS'].value_counts().reset_index()
+            data_status.columns = ['Status', 'Jumlah']
+            fig1 = px.pie(data_status, names='Status', values='Jumlah', hole=0.4, color='Status')
+            st.plotly_chart(fig1, use_container_width=True)
             
-        with col_grafik2:
-            st.markdown("**Sebaran Lokasi Tangki**")
-            loc_df = df['LOCATION'].value_counts().reset_index()
-            loc_df.columns = ['Lokasi', 'Jumlah']
-            fig_bar = px.bar(loc_df, x='Lokasi', y='Jumlah', color='Lokasi')
-            st.plotly_chart(fig_bar, use_container_width=True)
+        with kolom_grafik2:
+            st.markdown("**Posisi Lokasi Tangki**")
+            data_lokasi = df['LOCATION'].value_counts().reset_index()
+            data_lokasi.columns = ['Lokasi', 'Jumlah']
+            fig2 = px.bar(data_lokasi, x='Lokasi', y='Jumlah', color='Lokasi')
+            st.plotly_chart(fig2, use_container_width=True)
             
-        # C. Tabel Data Detail
-        st.subheader("Tabel Detail Isotank")
-        # Menambahkan fitur pencarian/filter bawaan dataframe
+        # Menampilkan Tabel Lengkap
+        st.subheader("Data Detail")
         st.dataframe(df, use_container_width=True, hide_index=True)
 
-
-# =============================================================
-# TAB 2: INPUT DATA BARU (SUBMIT DATA)
-# =============================================================
-with tab2:
-    st.subheader("Masukkan Data Kedatangan/Keberangkatan Tangki Baru")
+# --- BAGIAN INPUT DATA ---
+with tab_input:
+    st.subheader("Form Tambah Kedatangan/Status Tangki")
     
-    # st.form memastikan data dikirim serentak saat tombol diklik (tidak reload per kolom isian)
-    with st.form("form_tambah_tangki", clear_on_submit=True):
-        col_input1, col_input2 = st.columns(2)
+    with st.form("form_input", clear_on_submit=True):
+        kolom_form1, kolom_form2 = st.columns(2)
         
-        with col_input1:
+        with kolom_form1:
             input_vendor = st.text_input("Nama Vendor")
-            input_tank = st.text_input("TANK ID (Nomor Isotank)")
-            input_qty = st.number_input("Jumlah QTY", min_value=0.0)
+            input_tank_id = st.text_input("TANK ID (Wajib Diisi)")
+            input_qty = st.number_input("Jumlah Volume (QTY)", min_value=0.0)
             
-        with col_input2:
-            input_uom = st.selectbox("Satuan", ["KG", "L"])
-            input_status = st.selectbox("Status Tangki", ["FULL", "EMPTY"])
-            input_loc = st.selectbox("Lokasi", ["WAREHOUSE", "OUTBOUND", "INBOUND", "25KT"])
+        with kolom_form2:
+            input_uom = st.selectbox("Satuan", ["KG", "LITER"])
+            input_status = st.selectbox("Status", ["FULL", "EMPTY"])
+            input_lokasi = st.selectbox("Lokasi", ["WAREHOUSE", "OUTBOUND", "INBOUND", "25KT"])
             
-        btn_submit = st.form_submit_button("Simpan Data ke Excel")
+        tombol_simpan = st.form_submit_button("Simpan Data")
         
-        # Logika ketika tombol submit ditekan
-        if btn_submit:
-            if input_tank == "":
-                st.error("Tolong isi Nomor TANK ID terlebih dahulu!")
+        if tombol_simpan:
+            if input_tank_id.strip() == "":
+                st.error("Gagal: TANK ID tidak boleh kosong!")
             else:
                 try:
-                    # 1. Buka file excel tanpa merusak isinya (openpyxl)
-                    wb = load_workbook(FILE_NAME)
-                    ws = wb[SHEET_NAME]
+                    # Proses memasukkan data ke Excel
+                    wb = load_workbook(FILE_EXCEL)
+                    ws = wb[NAMA_SHEET]
                     
-                    # 2. Data baru yang akan dimasukkan
-                    # CATATAN: Urutan ini (Kolom A, B, C, dst) harus pas dengan posisi di Excel.
-                    # Asumsi berdasarkan gambar: A=Kosong, B=Kosong, C=Vendor, D=TankID, E=QTY, F=UoM, G=Status, H=Lokasi
-                    baris_baru = [None, None, input_vendor, input_tank, input_qty, input_uom, input_status, input_loc]
-                    
-                    # 3. Tambahkan ke baris paling bawah
+                    # Susunan kolom: Kolom A(Kosong), B(Kosong), C(Vendor), D(TankID), E(QTY), F(UoM), G(Status), H(Lokasi)
+                    baris_baru = [None, None, input_vendor, input_tank_id, input_qty, input_uom, input_status, input_lokasi]
                     ws.append(baris_baru)
                     
-                    # 4. Simpan kembali file Excel-nya
-                    wb.save(FILE_NAME)
-                    
-                    # 5. Refresh cache agar data baru langsung muncul di Dashboard
-                    st.cache_data.clear()
-                    st.success(f"Berhasil! Tangki {input_tank} telah ditambahkan ke data.")
-                
-                except Exception as error_msg:
-                    st.error(f"Gagal menyimpan data. Detail error: {error_msg}")
+                    wb.save(FILE_EXCEL)
+                    st.cache_data.clear() # Refresh aplikasi
+                    st.success(f"Data tangki {input_tank_id} berhasil disimpan!")
+                except Exception as e:
+                    st.error(f"Gagal menyimpan data: {e}")
