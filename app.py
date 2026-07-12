@@ -324,8 +324,8 @@ with tab_input:
     with kolom_form1:
         st.markdown("**1. Info Utama**")
         
-        idx_reagent = get_index(["-- Pilih Reagent --", "ACID", "ESCAID", "LAINNYA"], exist_data.get('Jenis Reagent', exist_data.get('REAGENT', '')))
-        input_reagent = st.selectbox("Jenis Reagent / Acid (Wajib)", ["-- Pilih Reagent --", "ACID", "ESCAID", "LAINNYA"], index=idx_reagent)
+        idx_reagent = get_index(["-- Pilih Reagent --", "ACID", "ESCAID"], exist_data.get('Jenis Reagent', exist_data.get('REAGENT', '')))
+        input_reagent = st.selectbox("Jenis Reagent / Acid (Wajib)", ["-- Pilih Reagent --", "ACID", "ESCAID"], index=idx_reagent)
         
         idx_vendor = get_index(opsi_vendor, exist_data.get('Vendor', ''))
         input_vendor = st.selectbox("Vendor (Wajib)", opsi_vendor, index=idx_vendor)
