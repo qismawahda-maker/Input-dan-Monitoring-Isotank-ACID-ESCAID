@@ -10,33 +10,42 @@ import io
 # ==========================================
 st.set_page_config(page_title="MONITORING ISOTANK ACID & ESCAID", page_icon="🛢️", layout="wide")
 
+# --- KODE CUSTOM CSS UNTUK MEMPERBESAR FONT ---
 st.markdown("""
     <style>
+        /* Ukuran font untuk Judul Utama */
         .main-title {
             font-size: 42px !important;
             font-weight: bold;
             margin-bottom: 20px;
         }
+        /* Ukuran font untuk Subheader / Judul Bagian */
         .stMarkdown h3, .stMarkdown h5 {
             font-size: 26px !important;
             font-weight: bold !important;
         }
+        /* Ukuran font untuk Label pada Filter Dropdown & Input */
         .stSelectbox label, .stTextInput label, .stNumberInput label {
             font-size: 20px !important;
             font-weight: 500 !important;
         }
+        /* Ukuran font untuk teks di dalam Dropdown & Input */
         .stSelectbox div, .stTextInput div, .stNumberInput div {
             font-size: 18px !important;
         }
+        /* Ukuran font untuk Teks Menu Tabs (Dashboard / Input) */
         .stTabs button {
             font-size: 22px !important;
         }
+        /* Ukuran teks angka pada kartu KPI */
         [data-testid="stMetricValue"] {
             font-size: 36px !important;
         }
+        /* Ukuran teks label kecil pada kartu KPI */
         [data-testid="stMetricLabel"] {
             font-size: 18px !important;
         }
+        /* Ukuran font untuk Tabel Data Detail */
         .stDataFrame div {
             font-size: 16px !important;
         }
@@ -173,7 +182,8 @@ with tab_dashboard:
         c4.metric("Status VENDOR", jml_vendor)
         
         st.divider()
-          # GRAFIK VISUAL (DENGAN ANGKA LANGSUNG MUNCUL)
+
+        # GRAFIK VISUAL (ANGKA MUNCUL LANGSUNG DI DALAM GRAFIK)
         kolom_grafik1, kolom_grafik2 = st.columns(2)
         with kolom_grafik1:
             st.markdown("**Perbandingan Status Tangki**")
@@ -181,7 +191,6 @@ with tab_dashboard:
                 data_status = df_tampil['STATUS'].value_counts().reset_index()
                 data_status.columns = ['Status', 'Jumlah']
                 
-                # Menampilkan angka langsung dengan textinfo='value'
                 fig1 = px.pie(data_status, names='Status', values='Jumlah', hole=0.4)
                 fig1.update_traces(textposition='inside', textinfo='value+percent')
                 st.plotly_chart(fig1, use_container_width=True)
@@ -194,7 +203,6 @@ with tab_dashboard:
                 data_lokasi = df_tampil['LOCATION'].value_counts().reset_index()
                 data_lokasi.columns = ['Lokasi', 'Jumlah']
                 
-                # Menampilkan angka langsung di atas/dalam bar chart
                 fig2 = px.bar(data_lokasi, x='Lokasi', y='Jumlah', color='Lokasi', text='Jumlah')
                 fig2.update_traces(textposition='inside')
                 st.plotly_chart(fig2, use_container_width=True)
@@ -223,7 +231,6 @@ with tab_dashboard:
         )
 
 # --- BAGIAN FORM INPUT ---
-# --- BAGIAN FORM INPUT ---
 with tab_input:
     st.subheader("Form Kedatangan & Status Tangki Baru")
     
@@ -233,29 +240,29 @@ with tab_input:
         with kolom_form1:
             st.markdown("**1. Info Utama**")
 
-            # Dropdown Jenis Reagent / Acid
+            # Dropdown Jenis Reagent / Acid (Wajib)
             input_reagent = st.selectbox("Jenis Reagent / Acid (Wajib)", ["-- Pilih Reagent --", "ACID", "ESCAID", "LAINNYA"])
             
-            # Dropdown Vendor
+            # Dropdown Vendor (Wajib)
             if not df.empty and 'Vendor' in df.columns:
                 opsi_vendor = ["-- Pilih Vendor --"] + sorted(df['Vendor'].astype(str).unique().tolist())
             else:
                 opsi_vendor = ["-- Pilih Vendor --", "ROLIMEX", "DWIJAYA", "ENERGI JAYA INOVASI PT", "ADIMITRA"]
             input_vendor = st.selectbox("Vendor (Wajib)", opsi_vendor)
             
-            # Input TANK ID
+            # Input TANK ID (Wajib)
             input_tank_id = st.text_input("TANK ID (Wajib Diisi)")
             
-            # Input QTY Manual (Murni Angka KG, Tanpa Dropdown UoM)
+            # Input QTY Manual (Murni Angka KG)
             input_qty = st.number_input("QTY (dalam KG)", min_value=0.0, step=1.0, format="%.2f")
             
         with kolom_form2:
             st.markdown("**2. Info Status**")
             
-            # Dropdown Status
+            # Dropdown Status (Wajib)
             input_status = st.selectbox("STATUS (Wajib)", ["-- Pilih Status --", "FULL", "EMPTY", "INSTALL", "VENDOR"])
             
-            # Dropdown Location
+            # Dropdown Location (Wajib)
             if not df.empty and 'LOCATION' in df.columns:
                 opsi_lokasi = ["-- Pilih Lokasi --"] + sorted(df['LOCATION'].astype(str).unique().tolist())
             else:
@@ -277,7 +284,6 @@ with tab_input:
             input_date_out = st.date_input("DATE OUT", value=None)
             
         st.markdown("---")
-        # Hanya perlu satu tombol di sini
         tombol_simpan = st.form_submit_button("Simpan ke Google Sheets")
         
         # ==========================================
@@ -303,44 +309,7 @@ with tab_input:
                     str_date_in = input_date_in.strftime("%Y-%m-%d") if input_date_in else ""
                     str_date_out = input_date_out.strftime("%Y-%m-%d") if input_date_out else ""
                     
-                    # Kolom UoM otomatis dikunci bernilai "KG" saat dikirim
-                    baris_baru = [
-                        input_vendor, input_tank_id, input_qty, "KG", 
-                        input_status, input_lokasi, input_qty_issued, str_date_empty, 
-                        input_ps, input_cm_in, str_date_in, input_po_in, 
-                        input_pr_po_out, input_qty_pr, input_cm_out, str_date_out,
-                        input_reagent
-                    ]
-                    
-                    worksheet.append_rows([baris_baru])
-                    st.cache_data.clear() 
-                    st.success(f"🎉 Berhasil! Data tangki {input_tank_id} dengan satuan KG telah tersimpan secara manual ke Google Sheets.")
-                except Exception as e:
-                    st.error(f"❌ Gagal saat menyimpan data: {e}")        
-        # ==========================================
-        # VALIDASI WAJIB DIISI SEBELUM DISIMPAN
-        # ==========================================
-        if tombol_simpan:
-            if input_vendor == "-- Pilih Vendor --":
-                st.error("❌ Gagal: Kolom 'Vendor' harus dipilih!")
-            elif input_tank_id.strip() == "":
-                st.error("❌ Gagal: Kolom 'TANK ID' tidak boleh kosong!")
-            elif input_reagent == "-- Pilih Reagent --":
-                st.error("❌ Gagal: Kolom 'Jenis Reagent / Acid' harus dipilih!")
-            elif input_status == "-- Pilih Status --":
-                st.error("❌ Gagal: Kolom 'STATUS' harus dipilih!")
-            elif input_lokasi == "-- Pilih Lokasi --":
-                st.error("❌ Gagal: Kolom 'LOCATION' harus dipilih!")
-            else:
-                try:
-                    client = get_gsheets_connection()
-                    worksheet = client.open_by_url(SPREADSHEET_URL).worksheet(NAMA_SHEET)
-                    
-                    str_date_empty = input_date_empty.strftime("%Y-%m-%d") if input_date_empty else ""
-                    str_date_in = input_date_in.strftime("%Y-%m-%d") if input_date_in else ""
-                    str_date_out = input_date_out.strftime("%Y-%m-%d") if input_date_out else ""
-                    
-                    # Kolom UoM (index ke-4 setelah input_qty) otomatis diisi teks "KG"
+                    # Kolom UoM otomatis diisi "KG"
                     baris_baru = [
                         input_vendor, input_tank_id, input_qty, "KG", 
                         input_status, input_lokasi, input_qty_issued, str_date_empty, 
@@ -354,31 +323,3 @@ with tab_input:
                     st.success(f"🎉 Berhasil! Data tangki {input_tank_id} dengan satuan KG telah tersimpan secara manual ke Google Sheets.")
                 except Exception as e:
                     st.error(f"❌ Gagal saat menyimpan data: {e}")
-        st.markdown("---")
-        tombol_simpan = st.form_submit_button("Simpan ke Google Sheets")
-        
-        if tombol_simpan:
-            if input_tank_id.strip() == "":
-                st.error("Gagal: TANK ID tidak boleh kosong!")
-            else:
-                try:
-                    client = get_gsheets_connection()
-                    worksheet = client.open_by_url(SPREADSHEET_URL).worksheet(NAMA_SHEET)
-                    
-                    str_date_empty = input_date_empty.strftime("%Y-%m-%d") if input_date_empty else ""
-                    str_date_in = input_date_in.strftime("%Y-%m-%d") if input_date_in else ""
-                    str_date_out = input_date_out.strftime("%Y-%m-%d") if input_date_out else ""
-                    
-                    baris_baru = [
-                        input_vendor, input_tank_id, input_qty, input_uom, 
-                        input_status, input_lokasi, input_qty_issued, str_date_empty, 
-                        input_ps, input_cm_in, str_date_in, input_po_in, 
-                        input_pr_po_out, input_qty_pr, input_cm_out, str_date_out,
-                        input_reagent
-                    ]
-                    
-                    worksheet.append_rows([baris_baru])
-                    st.cache_data.clear() 
-                    st.success(f"Berhasil! Data tangki {input_tank_id} beserta jenis reagent-nya telah tersimpan.")
-                except Exception as e:
-                    st.error(f"Gagal saat menyimpan data: {e}")
