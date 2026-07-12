@@ -8,7 +8,7 @@ import io
 # ==========================================
 # 1. KONFIGURASI AWAL & CUSTOM CSS FONT
 # ==========================================
-st.set_page_config(page_title="MONITORING ISOTANK", page_icon="🛢️", layout="wide")
+st.set_page_config(page_title="MONITORING ISOTANK ACID & ESCAID", page_icon="🛢️", layout="wide")
 
 st.markdown("""
     <style>
@@ -223,6 +223,7 @@ with tab_dashboard:
         )
 
 # --- BAGIAN FORM INPUT ---
+# --- BAGIAN FORM INPUT ---
 with tab_input:
     st.subheader("Form Kedatangan & Status Tangki Baru")
     
@@ -276,8 +277,46 @@ with tab_input:
             input_date_out = st.date_input("DATE OUT", value=None)
             
         st.markdown("---")
+        # Hanya perlu satu tombol di sini
         tombol_simpan = st.form_submit_button("Simpan ke Google Sheets")
         
+        # ==========================================
+        # VALIDASI WAJIB DIISI SEBELUM DISIMPAN
+        # ==========================================
+        if tombol_simpan:
+            if input_vendor == "-- Pilih Vendor --":
+                st.error("❌ Gagal: Kolom 'Vendor' harus dipilih!")
+            elif input_tank_id.strip() == "":
+                st.error("❌ Gagal: Kolom 'TANK ID' tidak boleh kosong!")
+            elif input_reagent == "-- Pilih Reagent --":
+                st.error("❌ Gagal: Kolom 'Jenis Reagent / Acid' harus dipilih!")
+            elif input_status == "-- Pilih Status --":
+                st.error("❌ Gagal: Kolom 'STATUS' harus dipilih!")
+            elif input_lokasi == "-- Pilih Lokasi --":
+                st.error("❌ Gagal: Kolom 'LOCATION' harus dipilih!")
+            else:
+                try:
+                    client = get_gsheets_connection()
+                    worksheet = client.open_by_url(SPREADSHEET_URL).worksheet(NAMA_SHEET)
+                    
+                    str_date_empty = input_date_empty.strftime("%Y-%m-%d") if input_date_empty else ""
+                    str_date_in = input_date_in.strftime("%Y-%m-%d") if input_date_in else ""
+                    str_date_out = input_date_out.strftime("%Y-%m-%d") if input_date_out else ""
+                    
+                    # Kolom UoM otomatis dikunci bernilai "KG" saat dikirim
+                    baris_baru = [
+                        input_vendor, input_tank_id, input_qty, "KG", 
+                        input_status, input_lokasi, input_qty_issued, str_date_empty, 
+                        input_ps, input_cm_in, str_date_in, input_po_in, 
+                        input_pr_po_out, input_qty_pr, input_cm_out, str_date_out,
+                        input_reagent
+                    ]
+                    
+                    worksheet.append_rows([baris_baru])
+                    st.cache_data.clear() 
+                    st.success(f"🎉 Berhasil! Data tangki {input_tank_id} dengan satuan KG telah tersimpan secara manual ke Google Sheets.")
+                except Exception as e:
+                    st.error(f"❌ Gagal saat menyimpan data: {e}")        
         # ==========================================
         # VALIDASI WAJIB DIISI SEBELUM DISIMPAN
         # ==========================================
