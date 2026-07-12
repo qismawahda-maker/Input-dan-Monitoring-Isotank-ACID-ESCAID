@@ -44,7 +44,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<div class="main-title">🛢️ MONITORING ISOTANK</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title">🛢️ MONITORING ISOTANK ACID & ESCAID</div>', unsafe_allow_html=True)
 
 SPREADSHEET_URL = 'https://docs.google.com/spreadsheets/d/1eX12pN5sfohdIlEOWKNMv2Cj80lTRvxp0k8H-zcd4DI/edit?gid=0#gid=0'
 NAMA_SHEET = 'ACID & ESCAID STATUS ' 
@@ -357,7 +357,7 @@ with tab_input:
         input_date_out = st.date_input("DATE OUT", value=konversi_ke_date(exist_data.get('DATE OUT', '')))
         
     st.markdown("---")
-    tombol_simpan = st.button("💾 Simpan Perubahan ke Google Sheets", type="primary")
+    tombol_simpan = st.button("💾 Update Data", type="primary")
     
     if tombol_simpan:
         if input_tank_id == "":
