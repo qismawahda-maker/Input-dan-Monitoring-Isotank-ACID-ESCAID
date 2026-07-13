@@ -235,7 +235,7 @@ with tab_forecast:
             df_fc = df_fc[df_fc[kol_reag].astype(str).str.upper() == reagent_pilihan]
 
         # 4. PERSIAPAN DATA VENDOR & INPUT FORECAST MANUAL
-        list_vendor_fc = ["ROL100IDR", "DWI101IDR", "ENERGI JAYA INOVASI PT", "ADI106IDR"]
+        list_vendor_fc = ["ROL100IDR", "DWI101IDR", "ENERGI JAYA INOVASI, PT", "ADI106IDR"]
         if 'Vendor' in df_fc.columns:
             vendor_tambahan = [v for v in df_fc['Vendor'].astype(str).unique() if v.strip() != '' and v not in list_vendor_fc and v != 'nan']
             list_vendor_fc.extend(vendor_tambahan)
