@@ -56,7 +56,8 @@ st.markdown("""
 st.markdown('<div class="main-title">🛢️ MONITORING ISOTANK ACID & ESCAID</div>', unsafe_allow_html=True)
 
 SPREADSHEET_URL = 'https://docs.google.com/spreadsheets/d/1eX12pN5sfohdIlEOWKNMv2Cj80lTRvxp0k8H-zcd4DI/edit?gid=0#gid=0'
-NAMA_SHEET = 'ACID & ESCAID STATUS ' 
+NAMA_SHEET_RAW = 'ACID & ESCAID STATUS ' 
+NAMA_SHEET_SUMMARY = 'summary'
 
 # ==========================================
 # 2. FUNGSI KONEKSI
@@ -73,33 +74,36 @@ def get_gsheets_connection():
     return client
 
 # ==========================================
-# 3. FUNGSI AMBIL DATA
+# 3. FUNGSI AMBIL DATA DARI DUA SHEET BERBEDA
 # ==========================================
 @st.cache_data(ttl=2)
-def ambil_data():
+def ambil_data(nama_sheet):
     try:
         client = get_gsheets_connection()
-        sheet = client.open_by_url(SPREADSHEET_URL).worksheet(NAMA_SHEET)
+        sheet = client.open_by_url(SPREADSHEET_URL).worksheet(nama_sheet)
         data_mentah = sheet.get_all_values()
         
         if not data_mentah or len(data_mentah) < 2:
             return pd.DataFrame()
             
-        df = pd.DataFrame(data_mentah[1:], columns=data_mentah[0])
-        return df
+        return pd.DataFrame(data_mentah[1:], columns=data_mentah[0])
     except Exception as e:
-        st.error(f"❌ Gagal membaca Google Sheets. Detail: {e}")
+        st.error(f"❌ Gagal membaca Google Sheets ({nama_sheet}). Detail: {e}")
         return pd.DataFrame()
 
-# Kita ambil data mentah penuh untuk fungsi pencarian riwayat
-df_mentah = ambil_data()
+# Ambil data raw untuk form update/history rekam jejak
+df_mentah = ambil_data(NAMA_SHEET_RAW)
 
-# Untuk visualisasi Dashboard, tetap gunakan data unik terbaru per TANK ID
-if not df_mentah.empty and 'TANK ID' in df_mentah.columns:
-    df = df_mentah[df_mentah['TANK ID'].astype(str).str.strip() != ''].copy()
-    df = df.drop_duplicates(subset=['TANK ID'], keep='last')
-else:
-    df = df_mentah.copy()
+# Ambil data langsung dari tab 'summary' untuk Dashboard & Forecast
+df = ambil_data(NAMA_SHEET_SUMMARY)
+
+# Jika summary kosong (baru pertama kali), ambil dari mentah
+if df.empty and not df_mentah.empty:
+    if 'TANK ID' in df_mentah.columns:
+        df = df_mentah[df_mentah['TANK ID'].astype(str).str.strip() != ''].copy()
+        df = df.drop_duplicates(subset=['TANK ID'], keep='last')
+    else:
+        df = df_mentah.copy()
 
 # Helper untuk mengubah string tanggal ke objek date Python
 def konversi_ke_date(tgl_str):
@@ -112,11 +116,9 @@ def konversi_ke_date(tgl_str):
             continue
     return None
 
-# FUNGSI PENYELAMAT: Mengubah string dari Sheets ke float secara aman
 def safe_float(val, default=0.0):
     if val is None:
         return default
-    # Bersihkan spasi dan hapus tanda koma ribuan jika ada (misal: "25,000" -> "25000")
     val_str = str(val).strip().replace(',', '')
     if not val_str or val_str == "":
         return default
@@ -128,13 +130,12 @@ def safe_float(val, default=0.0):
 # ==========================================
 # 4. TAMPILAN DASHBOARD, FORECAST & FORM INPUT
 # ==========================================
-# Menambahkan tab baru untuk Forecast
 tab_dashboard, tab_forecast, tab_input = st.tabs(["📊 Lihat Dashboard", "📈 Forecast & Summary", "📝 Input Data Baru / Update"])
 
 # --- BAGIAN DASHBOARD ---
 with tab_dashboard:
     if df.empty:
-        st.warning("⚠️ Data kosong. Pastikan baris ke-1 di Spreadsheet Anda berisi judul kolom.")
+        st.warning("⚠️ Data kosong. Pastikan tab 'summary' di Spreadsheet Anda berisi data.")
     else:
         # FILTER PENCARIAN
         st.markdown("### 🔍 Filter Pencarian")
@@ -200,9 +201,7 @@ with tab_dashboard:
         
         st.divider()
 
-        # ==========================================
-        # GRAFIK VISUAL (UKURAN ANGKA & FONT DIPERBESAR)
-        # ==========================================
+        # GRAFIK VISUAL
         kolom_grafik1, kolom_grafik2 = st.columns(2)
         with kolom_grafik1:
             st.markdown("**Perbandingan Status Tangki Keseluruhan**")
@@ -218,48 +217,26 @@ with tab_dashboard:
         with kolom_grafik2:
             st.markdown("**Rincian Status Tangki di Setiap Lokasi**")
             if 'LOCATION' in df_tampil.columns and 'STATUS' in df_tampil.columns and total_tangki > 0:
-                # Mengelompokkan data berdasarkan kombinasi LOKASI dan STATUS
                 data_lokasi_status = df_tampil.groupby(['LOCATION', 'STATUS']).size().reset_index(name='Jumlah')
                 data_lokasi_status.columns = ['Lokasi', 'Status', 'Jumlah']
                 
-                # Membuat grafik batang berkelompok
                 fig2 = px.bar(
                     data_lokasi_status, 
-                    x='Lokasi', 
-                    y='Jumlah', 
-                    color='Status',      
-                    barmode='group',     
-                    text='Jumlah',
-                    labels={'Jumlah': 'Jumlah Tangki'}
+                    x='Lokasi', y='Jumlah', color='Status', barmode='group', text='Jumlah', labels={'Jumlah': 'Jumlah Tangki'}
                 )
-                
-                # 1. Memperbesar tulisan angka di atas batang tangki
-                fig2.update_traces(
-                    textposition='outside', 
-                    textfont_size=15,       # << Ukuran angka di atas batang
-                    textfont_color='white'  # Menyesuaikan warna teks angka
-                )
-                
-                # 2. Memperbesar tulisan Label Sumbu X, Y, Judul, dan Legenda
+                fig2.update_traces(textposition='outside', textfont_size=15, textfont_color='white')
                 fig2.update_layout(
-                    xaxis_title="Lokasi",
-                    yaxis_title="Jumlah Unit Isotank",
-                    legend_title="Status Tangki",
-                    font=dict(
-                        size=16             # << Ukuran font teks label sumbu & legenda diperbesar
-                    ),
-                    xaxis=dict(tickfont=dict(size=14)), 
-                    yaxis=dict(tickfont=dict(size=14)), 
+                    xaxis_title="Lokasi", yaxis_title="Jumlah Unit Isotank", legend_title="Status Tangki",
+                    font=dict(size=16), xaxis=dict(tickfont=dict(size=14)), yaxis=dict(tickfont=dict(size=14)), 
                     uniformtext=dict(mode='hide', minsize=18) 
                 )
-                
                 st.plotly_chart(fig2, use_container_width=True)
             else:
                 st.info("Tidak ada data untuk grafik lokasi dan status.")
                 
         st.divider()
 
-        # DATA DETAIL & EXPORT XLSX
+        # DATA DETAIL & EXPORT
         st.subheader("Data Detail Keseluruhan")
         if 'QTY_NUM' in df_tampil.columns:
             df_tampil = df_tampil.drop(columns=['QTY_NUM'])
@@ -270,8 +247,7 @@ with tab_dashboard:
             df_tampil.to_excel(writer, index=False, sheet_name='Monitoring Isotank')
         st.download_button(
             label="📥 Download Data Detail (Format Excel .xlsx)",
-            data=buffer.getvalue(),
-            file_name="Data_Detail_Isotank.xlsx",
+            data=buffer.getvalue(), file_name="Data_Detail_Isotank.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
@@ -283,7 +259,7 @@ with tab_forecast:
     if not df.empty:
         df_fc = df.copy()
         
-        # --- 1. KONVERSI DATA ANGKA ---
+        # 1. KONVERSI DATA ANGKA
         if 'QTY' in df_fc.columns:
             df_fc['QTY_NUM'] = pd.to_numeric(df_fc['QTY'].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
         else:
@@ -294,7 +270,7 @@ with tab_forecast:
         else:
             df_fc['QTY_PR_NUM'] = 0.0
 
-        # --- 2. EKSTRAK BULAN DARI DATE IN & DATE OUT ---
+        # 2. EKSTRAK BULAN
         if 'DATE IN' in df_fc.columns:
             df_fc['DATE_IN_DT'] = pd.to_datetime(df_fc['DATE IN'], errors='coerce')
             df_fc['BULAN_IN'] = df_fc['DATE_IN_DT'].dt.month
@@ -307,7 +283,7 @@ with tab_forecast:
         else:
             df_fc['BULAN_OUT'] = 0
 
-        # --- 3. WIDGET FILTER FORECAST ---
+        # 3. WIDGET FILTER FORECAST
         col_fc1, col_fc2 = st.columns(2)
         
         kol_reag = next((col for col in df_fc.columns if 'REAGENT' in str(col).upper()), None)
@@ -323,17 +299,16 @@ with tab_forecast:
                                          options=[1,2,3,4,5,6,7,8,9,10,11,12], 
                                          index=datetime.now().month - 1)
 
-        # Menerapkan Filter Reagent
         if reagent_pilihan != "Semua Reagent" and kol_reag:
             df_fc = df_fc[df_fc[kol_reag].astype(str).str.upper() == reagent_pilihan]
 
-        # --- 4. PERSIAPAN DATA VENDOR & FORECAST ---
+        # 4. PERSIAPAN DATA VENDOR
         list_vendor_fc = ["ROL100IDR", "DWI101IDR", "ENERGI JAYA INOVASI, PT", "ADI106IDR"]
         if 'Vendor' in df_fc.columns:
             vendor_tambahan = [v for v in df_fc['Vendor'].astype(str).unique() if v.strip() != '' and v not in list_vendor_fc and v != 'nan']
             list_vendor_fc.extend(vendor_tambahan)
             
-        # >> UBAH ANGKA FORECAST DI SINI NANTI SESUAI KEBUTUHAN <<
+        # TARGET FORECAST MANUAL
         forecast_dict = {
             "ROL100IDR": 200000,
             "DWI101IDR": 250000,
@@ -344,94 +319,66 @@ with tab_forecast:
         nama_bulan_dict = {1:'Jan', 2:'Feb', 3:'Mar', 4:'Apr', 5:'May', 6:'Jun', 7:'Jul', 8:'Aug', 9:'Sep', 10:'Oct', 11:'Nov', 12:'Dec'}
         nama_bulan = nama_bulan_dict[bulan_pilihan]
 
-        # --- 5. LOGIKA KALKULASI LOOP PER VENDOR ---
+        # 5. LOGIKA KALKULASI LOOP PER VENDOR
         data_rows = []
         for v in list_vendor_fc:
             d_v = df_fc[df_fc['Vendor'].astype(str) == v]
 
             forecast_val = forecast_dict.get(v, 0)
-            
-            # QTY First PO (Acuannya Date Out di bulan pilihan)
             first_po_qty = d_v[d_v['BULAN_OUT'] == bulan_pilihan]['QTY_PR_NUM'].sum()
 
-            # On Site (Empty & Full di Warehouse)
             on_site_empty = len(d_v[(d_v['STATUS'].astype(str).str.upper() == 'EMPTY') & (d_v['LOCATION'].astype(str).str.upper() == 'WAREHOUSE')])
             on_site_full = len(d_v[(d_v['STATUS'].astype(str).str.upper() == 'FULL') & (d_v['LOCATION'].astype(str).str.upper() == 'WAREHOUSE')])
 
-            # Inbound Koe - Wtr
             d_koe = d_v[d_v['LOCATION'].astype(str).str.upper() == 'INBOUND- KOE WTR']
             koe_iso = len(d_koe)
             koe_kg = d_koe['QTY_NUM'].sum()
 
-            # Inbound Sub - Koe
             d_sub = d_v[d_v['LOCATION'].astype(str).str.upper() == 'INBOUND - SUB KOE']
             sub_iso = len(d_sub)
             sub_kg = d_sub['QTY_NUM'].sum()
             
-            # Inbound Hub Sub
             d_hub = d_v[d_v['LOCATION'].astype(str).str.upper() == 'INBOUND HUB SUB']
             hub_iso = len(d_hub)
             hub_kg = d_hub['QTY_NUM'].sum()
             
-            # Outbound Isotank (KOE & HUB)
             out_koe = len(d_v[d_v['LOCATION'].astype(str).str.upper().isin(['OUTBOUND', 'OUTBOUND KOE'])])
             out_hub = len(d_v[d_v['LOCATION'].astype(str).str.upper() == 'OUTBOUND HUB'])
             
-            # Vendor PO has Supplied (Acuannya Date In) dengan Logika Khusus Juni (6)
+            # Logika Khusus Juni (6)
             if bulan_pilihan == 6:
                 mask_supplied = (d_v['BULAN_IN'] == 6) | ((d_v['BULAN_IN'] > 0) & (d_v['BULAN_IN'] <= 5) & (d_v['STATUS'].astype(str).str.upper() == 'FULL'))
             else:
                 mask_supplied = (d_v['BULAN_IN'] == bulan_pilihan)
             
             supplied_kg = d_v[mask_supplied]['QTY_NUM'].sum()
-
-            # Difference = Total Supplied - Target First PO
             difference = supplied_kg - first_po_qty
-            
-            # Total Isotank Rotation
             total_rotation = on_site_empty + on_site_full + koe_iso + sub_iso + hub_iso + out_koe + out_hub
 
             data_rows.append([
-                v, forecast_val, first_po_qty,
-                on_site_empty, on_site_full, 
-                koe_iso, koe_kg, 
-                sub_iso, sub_kg,
-                hub_iso, hub_kg,
-                out_koe, out_hub,
-                supplied_kg, difference,
-                total_rotation
+                v, forecast_val, first_po_qty, on_site_empty, on_site_full, 
+                koe_iso, koe_kg, sub_iso, sub_kg, hub_iso, hub_kg,
+                out_koe, out_hub, supplied_kg, difference, total_rotation
             ])
 
-        # Hitung Baris "TOTAL" Bawah
         total_row = ['TOTAL']
         for i in range(1, len(data_rows[0])):
             total_row.append(sum(row[i] for row in data_rows))
         data_rows.append(total_row)
 
-        # --- 6. BUAT STRUKTUR KOLOM BERTINGKAT (MULTI-INDEX) ---
         kolom_bertingkat = pd.MultiIndex.from_tuples([
-            ('Vendor', ''),
-            ('Forecast ( Kg )', ''),
-            (f"Qty First PO {nama_bulan}'26", ''),
-            ('On Site', 'Empty'), 
-            ('On Site', 'Full'),
-            ('Inbound Koe - Wtr', 'Qty Isotank'), 
-            ('Inbound Koe - Wtr', 'Qty (Kg)'),
-            ('Inbound Sub - Koe', 'Qty Isotank'), 
-            ('Inbound Sub - Koe', 'Qty ( Kg )'),
-            ('Inbound Hub Sub', 'Qty Isotank'), 
-            ('Inbound Hub Sub', 'Qty ( Kg )'),
-            ('Outbound Isotank', 'KOE'), 
-            ('Outbound Isotank', 'HUB'),
+            ('Vendor', ''), ('Forecast ( Kg )', ''), (f"Qty First PO {nama_bulan}'26", ''),
+            ('On Site', 'Empty'), ('On Site', 'Full'),
+            ('Inbound Koe - Wtr', 'Qty Isotank'), ('Inbound Koe - Wtr', 'Qty (Kg)'),
+            ('Inbound Sub - Koe', 'Qty Isotank'), ('Inbound Sub - Koe', 'Qty ( Kg )'),
+            ('Inbound Hub Sub', 'Qty Isotank'), ('Inbound Hub Sub', 'Qty ( Kg )'),
+            ('Outbound Isotank', 'KOE'), ('Outbound Isotank', 'HUB'),
             (f"Vendor PO {nama_bulan}'26", 'has Supplied (Kg)'), 
-            ('Difference', 'Qty ( Kg )'),
-            ('Total Isotank', 'Rotation')
+            ('Difference', 'Qty ( Kg )'), ('Total Isotank', 'Rotation')
         ])
 
-        # Generate DataFrame
         df_tabel_fc = pd.DataFrame(data_rows, columns=kolom_bertingkat)
         
-        # --- 7. FORMATTING & WARNA MERAH/HIJAU ---
         def format_angka_excel(val):
             if pd.isna(val) or val == 0:
                 return "-"
@@ -442,12 +389,11 @@ with tab_forecast:
         def warnai_merah_hijau(val):
             if isinstance(val, (int, float)):
                 if val < 0:
-                    return 'color: #ff4b4b;' # Merah
+                    return 'color: #ff4b4b;'
                 elif val > 0:
-                    return 'color: #2ecc71;' # Hijau
+                    return 'color: #2ecc71;'
             return ''
 
-        # Terapkan styling
         try:
             tabel_styled = df_tabel_fc.style.format(format_angka_excel).map(warnai_merah_hijau, subset=[('Difference', 'Qty ( Kg )')])
         except AttributeError:
@@ -455,24 +401,60 @@ with tab_forecast:
         
         st.dataframe(tabel_styled, use_container_width=True, hide_index=True)
         
+        st.divider()
+        
+        # ==========================================
+        # TABEL SUMMARY (VLOOKUP VIEW)
+        # ==========================================
+        st.subheader("📑 Data Summary All Isotank (Last Status)")
+        st.info("💡 Data yang ditampilkan di halaman ini sudah 100% tersinkronisasi dan bersumber langsung dari tab **summary** di Google Sheets Anda.")
+        
+        kolom_tersedia = df.columns.tolist()
+        col_vendor = "Vendor" if "Vendor" in kolom_tersedia else None
+        col_tank = "TANK ID" if "TANK ID" in kolom_tersedia else None
+        col_status = "STATUS" if "STATUS" in kolom_tersedia else None
+        col_lokasi = "LOCATION" if "LOCATION" in kolom_tersedia else None
+        col_qty_po = "QTY" if "QTY" in kolom_tersedia else None
+        col_qty_pr = "QTY PR" if "QTY PR" in kolom_tersedia else None
+        col_tgl_out = "DATE OUT" if "DATE OUT" in kolom_tersedia else None
+        col_pr = "PR/PO OUT" if "PR/PO OUT" in kolom_tersedia else None
+
+        kolom_ringkas = [c for c in [col_vendor, col_tank, col_status, col_lokasi, col_qty_po, col_qty_pr, col_tgl_out, col_pr] if c is not None]
+
+        if kolom_ringkas:
+            df_summary = df[kolom_ringkas].copy()
+            
+            rename_dict = {}
+            if col_qty_po: rename_dict[col_qty_po] = "Qty PO"
+            if col_qty_pr: rename_dict[col_qty_pr] = "Qty PR"
+            if col_tgl_out: rename_dict[col_tgl_out] = "Tanggal Out"
+            if col_pr: rename_dict[col_pr] = "PR"
+
+            df_summary = df_summary.rename(columns=rename_dict)
+            st.dataframe(df_summary, use_container_width=True, hide_index=True)
+            
+            buffer_summary = io.BytesIO()
+            with pd.ExcelWriter(buffer_summary, engine='openpyxl') as writer:
+                df_summary.to_excel(writer, index=False, sheet_name='Summary_Isotank')
+            st.download_button(
+                label="📥 Download Excel Data Summary",
+                data=buffer_summary.getvalue(), file_name="Summary_All_Isotank.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
     else:
         st.warning("Data belum tersedia untuk membuat tabel Forecast.")
-
 
 # --- BAGIAN FORM INPUT (AUTOFILL & UPDATE) ---
 with tab_input:
     st.subheader("Form Input / Update Status Tangki")
     st.info("💡 Caranya: Ketik TANK ID terlebih dahulu. Jika data tangki sudah pernah ada, semua kolom di bawah akan otomatis terisi dengan data terakhirnya.")
 
-    # TANK ID ditaruh di luar form agar memicu deteksi real-time
     input_tank_id = st.text_input("👉 Masukkan TANK ID Anda:", key="input_tank_id_main").strip()
 
-    # Inisialisasi data default kosong
     exist_data = {}
     ditemukan = False
 
     if input_tank_id:
-        # Cari data terakhir (paling bawah di sheet) berdasarkan TANK ID tersebut
         df_match = df_mentah[df_mentah['TANK ID'].astype(str).str.strip() == input_tank_id]
         if not df_match.empty:
             exist_data = df_match.iloc[-1].to_dict()
@@ -481,7 +463,6 @@ with tab_input:
         else:
             st.info(f"✨ Tangki **{input_tank_id}** baru belum terdaftar. Silakan isi data dari awal.")
 
-    # Pilihan Dropdown Dinamis
     opsi_vendor = ["ROL100IDR", "DWI101IDR", "ENERGI JAYA INOVASI, PT", "ADI106IDR"]
     if not df_mentah.empty and 'Vendor' in df_mentah.columns:
         opsi_vendor = sorted(list(set(opsi_vendor + df_mentah['Vendor'].astype(str).unique().tolist())))
@@ -494,7 +475,6 @@ with tab_input:
     if "-- Pilih Lokasi --" not in opsi_lokasi:
         opsi_lokasi = ["-- Pilih Lokasi --"] + opsi_lokasi
 
-    # Index Finder untuk Dropdown Autofill
     def get_index(opsi_list, target_val):
         if target_val:
             target_str = str(target_val).strip().upper()
@@ -503,32 +483,27 @@ with tab_input:
                     return idx
         return 0
 
-    # Menyusun layout Form Pengisian
     kolom_form1, kolom_form2, kolom_form3 = st.columns(3)
     
     with kolom_form1:
         st.markdown("**1. Info Utama**")
-        
         idx_reagent = get_index(["-- Pilih Reagent --", "ACID", "ESCAID"], exist_data.get('Jenis Reagent', exist_data.get('REAGENT', '')))
         input_reagent = st.selectbox("Jenis Reagent / Acid (Wajib)", ["-- Pilih Reagent --", "ACID", "ESCAID"], index=idx_reagent)
         
         idx_vendor = get_index(opsi_vendor, exist_data.get('Vendor', ''))
         input_vendor = st.selectbox("Vendor (Wajib)", opsi_vendor, index=idx_vendor)
         
-        # Konversi QTY dengan safe_float agar bebas error string/kosong
         qty_awal = safe_float(exist_data.get('QTY', 0.0)) if ditemukan else 0.0
         input_qty = st.number_input("QTY (dalam KG)", min_value=0.0, value=qty_awal, step=1.0, format="%.2f")
         
     with kolom_form2:
         st.markdown("**2. Info Status**")
-        
         idx_status = get_index(["-- Pilih Status --", "FULL", "EMPTY", "INSTALL", "VENDOR"], exist_data.get('STATUS', ''))
         input_status = st.selectbox("STATUS (Wajib)", ["-- Pilih Status --", "FULL", "EMPTY", "INSTALL", "VENDOR"], index=idx_status)
         
         idx_lokasi = get_index(opsi_lokasi, exist_data.get('LOCATION', ''))
         input_lokasi = st.selectbox("LOCATION (Wajib)", opsi_lokasi, index=idx_lokasi)
         
-        # Konversi QTY ISSUED dengan aman
         qty_issued_awal = safe_float(exist_data.get('QTY ISSUED', 0.0)) if ditemukan else 0.0
         input_qty_issued = st.number_input("QTY ISSUED (KG)", min_value=0.0, value=qty_issued_awal, step=1.0, format="%.2f")
         
@@ -542,7 +517,6 @@ with tab_input:
         input_po_in = st.text_input("PO IN", value=str(exist_data.get('PO IN', '')) if ditemukan else "")
         input_pr_po_out = st.text_input("PR/PO OUT", value=str(exist_data.get('PR/PO OUT', '')) if ditemukan else "")
         
-        # Konversi QTY PR dengan aman
         qty_pr_awal = safe_float(exist_data.get('QTY PR', 0.0)) if ditemukan else 0.0
         input_qty_pr = st.number_input("QTY PR (KG)", min_value=0.0, value=qty_pr_awal, step=1.0, format="%.2f")
         
@@ -552,7 +526,6 @@ with tab_input:
     st.markdown("---")
     tombol_simpan = st.button("💾 Update Data", type="primary")
     
-    # LOGIKA SIMPAN & OTOMATISASI UPDATE G-SHEETS 'summary'
     if tombol_simpan:
         if input_tank_id == "":
             st.error("❌ Gagal: Masukkan TANK ID terlebih dahulu di kotak atas!")
@@ -568,7 +541,7 @@ with tab_input:
             try:
                 # 1. KONEKSI KE SHEET UTAMA & SIMPAN DATA HISTORI
                 client = get_gsheets_connection()
-                worksheet = client.open_by_url(SPREADSHEET_URL).worksheet(NAMA_SHEET)
+                worksheet = client.open_by_url(SPREADSHEET_URL).worksheet(NAMA_SHEET_RAW)
                 
                 str_date_empty = input_date_empty.strftime("%Y-%m-%d") if input_date_empty else ""
                 str_date_in = input_date_in.strftime("%Y-%m-%d") if input_date_in else ""
@@ -582,19 +555,15 @@ with tab_input:
                     input_reagent
                 ]
                 
-                # Menambahkan rekam jejak ke sheet utama
                 worksheet.append_rows([baris_baru])
                 
                 # ==========================================
-                # 2. OTOMATISASI UPDATE TAB 'summary' DI GOOGLE SHEETS
+                # 2. OTOMATISASI UPDATE TAB 'summary' (SELURUH KOLOM)
                 # ==========================================
                 try:
-                    sheet_summary = client.open_by_url(SPREADSHEET_URL).worksheet("summary")
+                    sheet_summary = client.open_by_url(SPREADSHEET_URL).worksheet(NAMA_SHEET_SUMMARY)
                     
-                    if not df_mentah.empty:
-                        kolom_master = df_mentah.columns
-                    else:
-                        kolom_master = ["Vendor", "TANK ID", "QTY", "UoM", "STATUS", "LOCATION", "QTY ISSUED", "Date Empty", "PS", "CM IN", "DATE IN", "PO IN", "PR/PO OUT", "QTY PR", "CM OUT", "DATE OUT", "REAGENT"]
+                    kolom_master = ["Vendor", "TANK ID", "QTY", "UoM", "STATUS", "LOCATION", "QTY ISSUED", "Date Empty", "PS", "CM IN", "DATE IN", "PO IN", "PR/PO OUT", "QTY PR", "CM OUT", "DATE OUT", "REAGENT"]
 
                     df_baru = pd.DataFrame([baris_baru], columns=kolom_master)
                     
@@ -603,23 +572,15 @@ with tab_input:
                     else:
                         df_gabung = df_baru
                     
-                    # Buang TANK ID duplikat, sisakan yang terbaru
                     df_unik = df_gabung[df_gabung['TANK ID'].astype(str).str.strip() != '']
                     df_unik = df_unik.drop_duplicates(subset=['TANK ID'], keep='last')
                     
-                    kolom_diinginkan = ["Vendor", "TANK ID", "STATUS", "LOCATION", "QTY", "QTY PR", "DATE OUT", "PR/PO OUT"]
-                    
-                    for col in kolom_diinginkan:
+                    # Ambil SELURUH kolom agar Dashboard/Forecast tidak error
+                    for col in kolom_master:
                         if col not in df_unik.columns:
                             df_unik[col] = ""
                             
-                    df_summary_gsheet = df_unik[kolom_diinginkan].copy()
-                    df_summary_gsheet = df_summary_gsheet.rename(columns={
-                        "QTY": "Qty PO",
-                        "QTY PR": "Qty PR",
-                        "DATE OUT": "Tanggal Out",
-                        "PR/PO OUT": "PR"
-                    })
+                    df_summary_gsheet = df_unik[kolom_master].copy()
                     
                     sheet_summary.clear()
                     data_summary_final = [df_summary_gsheet.columns.values.tolist()] + df_summary_gsheet.fillna("").values.tolist()
@@ -630,9 +591,8 @@ with tab_input:
                         sheet_summary.update(values=data_summary_final, range_name="A1")
                         
                 except Exception as e_sum:
-                    st.warning(f"⚠️ Data utama tersimpan, tapi gagal menyusun ulang sheet 'summary' di Google Sheets. Detail error: {e_sum}")
+                    st.warning(f"⚠️ Data tersimpan, tapi gagal menyusun sheet 'summary'. Detail error: {e_sum}")
 
-                # Bersihkan cache dan Refresh aplikasi agar update data langsung terlihat
                 st.cache_data.clear() 
                 st.success(f"🎉 SUKSES BESAR! Data tangki {input_tank_id} berhasil masuk ke Database Utama dan Tab 'summary' di Google Sheets otomatis diperbarui.")
                 st.rerun()
