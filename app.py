@@ -274,16 +274,15 @@ with tab_dashboard:
             file_name="Data_Detail_Isotank.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
-
-# --- BAGIAN FORECAST & SUMMARY ---
+# --- BAGIAN FORECAST REAGENT (Mengambil dari Tab Summary) ---
 with tab_forecast:
     st.markdown('<div class="main-title">Tabel Forecast Reagent</div>', unsafe_allow_html=True)
-    st.info("💡 **Petunjuk:** Khusus bulan Juni, data Inbound menyertakan bulan Mei & sebelumnya yang berstatus FULL. Nilai Forecast (Kg) bisa Anda atur di dalam kodingan `forecast_dict`.")
+    st.info("💡 **Petunjuk:** Forecast (Kg) bisa diinput manual di menu *'Atur Target Forecast'* di bawah. Outbound diringkas jadi 1 kolom, dan Qty First PO menggunakan gabungan dari QTY PR (jika bulan sesuai) & QTY PO (jika tgl out kosong).")
 
-    if not df.empty:
-        df_fc = df.copy()
+    if not df_summary.empty:
+        df_fc = df_summary.copy()
         
-        # --- 1. KONVERSI DATA ANGKA ---
+        # 1. KONVERSI DATA ANGKA
         if 'QTY' in df_fc.columns:
             df_fc['QTY_NUM'] = pd.to_numeric(df_fc['QTY'].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
         else:
@@ -294,7 +293,7 @@ with tab_forecast:
         else:
             df_fc['QTY_PR_NUM'] = 0.0
 
-        # --- 2. EKSTRAK BULAN DARI DATE IN & DATE OUT ---
+        # 2. EKSTRAK BULAN
         if 'DATE IN' in df_fc.columns:
             df_fc['DATE_IN_DT'] = pd.to_datetime(df_fc['DATE IN'], errors='coerce')
             df_fc['BULAN_IN'] = df_fc['DATE_IN_DT'].dt.month
@@ -307,7 +306,7 @@ with tab_forecast:
         else:
             df_fc['BULAN_OUT'] = 0
 
-        # --- 3. WIDGET FILTER FORECAST ---
+        # 3. WIDGET FILTER FORECAST & BULAN
         col_fc1, col_fc2 = st.columns(2)
         
         kol_reag = next((col for col in df_fc.columns if 'REAGENT' in str(col).upper()), None)
@@ -319,38 +318,54 @@ with tab_forecast:
             reagent_pilihan = st.selectbox("Tampilkan Tabel Untuk Reagent:", list_opt_reagent, key="fc_reagent")
             
         with col_fc2:
-            bulan_pilihan = st.selectbox("Pilih Bulan Target (Acuan Date In & Date Out):", 
-                                         options=[1,2,3,4,5,6,7,8,9,10,11,12], 
-                                         index=datetime.now().month - 1)
+            bulan_pilihan = st.selectbox("Pilih Bulan Target (Acuan Date In & Date Out):", options=[1,2,3,4,5,6,7,8,9,10,11,12], index=datetime.now().month - 1)
 
-        # Menerapkan Filter Reagent
         if reagent_pilihan != "Semua Reagent" and kol_reag:
             df_fc = df_fc[df_fc[kol_reag].astype(str).str.upper() == reagent_pilihan]
 
-        # --- 4. PERSIAPAN DATA VENDOR & FORECAST ---
+        # 4. PERSIAPAN DATA VENDOR & INPUT FORECAST MANUAL
         list_vendor_fc = ["ROL100IDR", "DWI101IDR", "ENERGI JAYA INOVASI, PT", "ADI106IDR"]
         if 'Vendor' in df_fc.columns:
             vendor_tambahan = [v for v in df_fc['Vendor'].astype(str).unique() if v.strip() != '' and v not in list_vendor_fc and v != 'nan']
             list_vendor_fc.extend(vendor_tambahan)
             
-        # >> UBAH ANGKA FORECAST DI SINI NANTI <<
-        forecast_dict = {
-            "ROL100IDR": 200000,
-            "DWI101IDR": 250000,
-            "ENERGI JAYA INOVASI, PT": 200000,
-            "ADI106IDR": 150000
-        }
-
         nama_bulan_dict = {1:'Jan', 2:'Feb', 3:'Mar', 4:'Apr', 5:'May', 6:'Jun', 7:'Jul', 8:'Aug', 9:'Sep', 10:'Oct', 11:'Nov', 12:'Dec'}
         nama_bulan = nama_bulan_dict[bulan_pilihan]
 
-        # --- 5. LOGIKA KALKULASI LOOP PER VENDOR ---
+        # Inisialisasi Session State agar ingatan input manual tersimpan
+        if 'forecast_targets' not in st.session_state:
+            st.session_state['forecast_targets'] = {}
+        if bulan_pilihan not in st.session_state['forecast_targets']:
+            st.session_state['forecast_targets'][bulan_pilihan] = {
+                "ROL100IDR": 200000,
+                "DWI101IDR": 250000,
+                "ENERGI JAYA INOVASI, PT": 200000,
+                "ADI106IDR": 150000
+            }
+
+        with st.expander("⚙️ Atur Target Forecast (Kg) Manual", expanded=False):
+            st.markdown(f"**Masukkan Target Forecast Khusus Bulan {nama_bulan}:**")
+            cols = st.columns(4)
+            for i, v in enumerate(list_vendor_fc):
+                if v not in st.session_state['forecast_targets'][bulan_pilihan]:
+                    st.session_state['forecast_targets'][bulan_pilihan][v] = 0
+                    
+                default_val = st.session_state['forecast_targets'][bulan_pilihan][v]
+                new_val = cols[i % 4].number_input(f"{v}", value=int(default_val), step=1000, key=f"fc_{bulan_pilihan}_{v}")
+                st.session_state['forecast_targets'][bulan_pilihan][v] = new_val
+
+        # 5. LOGIKA KALKULASI LOOP PER VENDOR
         data_rows = []
         for v in list_vendor_fc:
             d_v = df_fc[df_fc['Vendor'].astype(str) == v]
 
-            forecast_val = forecast_dict.get(v, 0)
-            first_po_qty = d_v[d_v['BULAN_OUT'] == bulan_pilihan]['QTY_PR_NUM'].sum()
+            # Ambil nilai Forecast hasil inputan manual tadi
+            forecast_val = st.session_state['forecast_targets'][bulan_pilihan][v]
+            
+            # Logika QTY FIRST PO: Jika di bulan tersebut (QTY PR) + Jika Tgl Out Kosong (QTY PO)
+            qty_pr_bulan = d_v[d_v['BULAN_OUT'] == bulan_pilihan]['QTY_PR_NUM'].sum()
+            qty_po_kosong = d_v[d_v['BULAN_OUT'] == 0]['QTY_NUM'].sum()
+            first_po_qty = qty_pr_bulan + qty_po_kosong
 
             on_site_empty = len(d_v[(d_v['STATUS'].astype(str).str.upper() == 'EMPTY') & (d_v['LOCATION'].astype(str).str.upper() == 'WAREHOUSE')])
             on_site_full = len(d_v[(d_v['STATUS'].astype(str).str.upper() == 'FULL') & (d_v['LOCATION'].astype(str).str.upper() == 'WAREHOUSE')])
@@ -367,9 +382,10 @@ with tab_forecast:
             hub_iso = len(d_hub)
             hub_kg = d_hub['QTY_NUM'].sum()
             
-            out_koe = len(d_v[d_v['LOCATION'].astype(str).str.upper().isin(['OUTBOUND', 'OUTBOUND KOE'])])
-            out_hub = len(d_v[d_v['LOCATION'].astype(str).str.upper() == 'OUTBOUND HUB'])
+            # Outbound Isotank (Semua yang berbau Outbound digabung)
+            outbound_iso = len(d_v[d_v['LOCATION'].astype(str).str.upper().str.contains('OUTBOUND')])
             
+            # Vendor PO has Supplied
             if bulan_pilihan == 6:
                 mask_supplied = (d_v['BULAN_IN'] == 6) | ((d_v['BULAN_IN'] > 0) & (d_v['BULAN_IN'] <= 5) & (d_v['STATUS'].astype(str).str.upper() == 'FULL'))
             else:
@@ -377,17 +393,12 @@ with tab_forecast:
             
             supplied_kg = d_v[mask_supplied]['QTY_NUM'].sum()
             difference = supplied_kg - first_po_qty
-            total_rotation = on_site_empty + on_site_full + koe_iso + sub_iso + hub_iso + out_koe + out_hub
+            total_rotation = on_site_empty + on_site_full + koe_iso + sub_iso + hub_iso + outbound_iso
 
             data_rows.append([
-                v, forecast_val, first_po_qty,
-                on_site_empty, on_site_full, 
-                koe_iso, koe_kg, 
-                sub_iso, sub_kg,
-                hub_iso, hub_kg,
-                out_koe, out_hub,
-                supplied_kg, difference,
-                total_rotation
+                v, forecast_val, first_po_qty, on_site_empty, on_site_full, 
+                koe_iso, koe_kg, sub_iso, sub_kg, hub_iso, hub_kg,
+                outbound_iso, supplied_kg, difference, total_rotation
             ])
 
         total_row = ['TOTAL']
@@ -396,34 +407,27 @@ with tab_forecast:
         data_rows.append(total_row)
 
         kolom_bertingkat = pd.MultiIndex.from_tuples([
-            ('Vendor', ''),
-            ('Forecast ( Kg )', ''),
-            (f"Qty First PO {nama_bulan}'26", ''),
+            ('Vendor', ''), ('Forecast ( Kg )', ''), (f"Qty First PO {nama_bulan}'26", ''),
             ('On Site', 'Empty'), ('On Site', 'Full'),
             ('Inbound Koe - Wtr', 'Qty Isotank'), ('Inbound Koe - Wtr', 'Qty (Kg)'),
             ('Inbound Sub - Koe', 'Qty Isotank'), ('Inbound Sub - Koe', 'Qty ( Kg )'),
             ('Inbound Hub Sub', 'Qty Isotank'), ('Inbound Hub Sub', 'Qty ( Kg )'),
-            ('Outbound Isotank', 'KOE'), ('Outbound Isotank', 'HUB'),
+            ('Outbound Isotank', ''),
             (f"Vendor PO {nama_bulan}'26", 'has Supplied (Kg)'), 
-            ('Difference', 'Qty ( Kg )'),
-            ('Total Isotank', 'Rotation')
+            ('Difference', 'Qty ( Kg )'), ('Total Isotank Rotation', '')
         ])
 
         df_tabel_fc = pd.DataFrame(data_rows, columns=kolom_bertingkat)
         
         def format_angka_excel(val):
-            if pd.isna(val) or val == 0:
-                return "-"
-            elif isinstance(val, (int, float)):
-                return "{:,.0f}".format(val)
+            if pd.isna(val) or val == 0: return "-"
+            elif isinstance(val, (int, float)): return "{:,.0f}".format(val)
             return val
 
         def warnai_merah_hijau(val):
             if isinstance(val, (int, float)):
-                if val < 0:
-                    return 'color: #ff4b4b;'
-                elif val > 0:
-                    return 'color: #2ecc71;'
+                if val < 0: return 'color: #ff4b4b;'
+                elif val > 0: return 'color: #2ecc71;'
             return ''
 
         try:
@@ -432,52 +436,9 @@ with tab_forecast:
             tabel_styled = df_tabel_fc.style.format(format_angka_excel).applymap(warnai_merah_hijau, subset=[('Difference', 'Qty ( Kg )')])
         
         st.dataframe(tabel_styled, use_container_width=True, hide_index=True)
-        
-        st.divider()
-        
-        # ==========================================
-        # TABEL SUMMARY (VLOOKUP OTOMATIS)
-        # ==========================================
-        st.subheader("📑 Data Summary All Isotank (Last Status)")
-        st.info("💡 Tabel di bawah ini setara dengan proses **VLOOKUP** di Excel Anda. Sistem otomatis menarik dan menampilkan data *paling terbaru* untuk setiap TANK ID.")
-        
-        kolom_tersedia = df.columns.tolist()
-        col_vendor = "Vendor" if "Vendor" in kolom_tersedia else None
-        col_tank = "TANK ID" if "TANK ID" in kolom_tersedia else None
-        col_status = "STATUS" if "STATUS" in kolom_tersedia else None
-        col_lokasi = "LOCATION" if "LOCATION" in kolom_tersedia else None
-        col_qty_po = "QTY" if "QTY" in kolom_tersedia else None
-        col_qty_pr = "QTY PR" if "QTY PR" in kolom_tersedia else None
-        col_tgl_out = "DATE OUT" if "DATE OUT" in kolom_tersedia else None
-        col_pr = "PR/PO OUT" if "PR/PO OUT" in kolom_tersedia else None
-
-        kolom_ringkas = [c for c in [col_vendor, col_tank, col_status, col_lokasi, col_qty_po, col_qty_pr, col_tgl_out, col_pr] if c is not None]
-
-        if kolom_ringkas:
-            df_summary = df[kolom_ringkas].copy()
-            
-            rename_dict = {}
-            if col_qty_po: rename_dict[col_qty_po] = "Qty PO"
-            if col_qty_pr: rename_dict[col_qty_pr] = "Qty PR"
-            if col_tgl_out: rename_dict[col_tgl_out] = "Tanggal Out"
-            if col_pr: rename_dict[col_pr] = "PR"
-
-            df_summary = df_summary.rename(columns=rename_dict)
-
-            st.dataframe(df_summary, use_container_width=True, hide_index=True)
-            
-            buffer_summary = io.BytesIO()
-            with pd.ExcelWriter(buffer_summary, engine='openpyxl') as writer:
-                df_summary.to_excel(writer, index=False, sheet_name='Summary_Isotank')
-            st.download_button(
-                label="📥 Download Excel Data Summary",
-                data=buffer_summary.getvalue(),
-                file_name="Summary_All_Isotank.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-
     else:
-        st.warning("Data belum tersedia.")
+        st.warning("Data belum tersedia untuk membuat tabel Forecast.")
+
 # --- BAGIAN FORM INPUT (AUTOFILL & UPDATE) ---
 with tab_input:
     st.subheader("Form Input / Update Status Tangki")
