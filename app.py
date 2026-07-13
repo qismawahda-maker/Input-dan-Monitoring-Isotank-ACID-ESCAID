@@ -278,7 +278,7 @@ with tab_dashboard:
 # --- BAGIAN FORECAST REAGENT (Mengambil dari Tab Summary) ---
 with tab_forecast:
     st.markdown('<div class="main-title">Tabel Forecast Reagent</div>', unsafe_allow_html=True)
-    st.info("💡 **Petunjuk:** Forecast (Kg) bisa diinput manual di menu *'Atur Target Forecast'* di bawah. Outbound diringkas jadi 1 kolom, dan Qty First PO menggunakan gabungan dari QTY PR (jika bulan sesuai) & QTY PO (jika tgl out kosong).")
+    st.info("💡 **Petunjuk:** Kolom On Site sekarang menghitung total unit (Empty & Full) serta Qty (Kg) khusus untuk status Full di lokasi WAREHOUSE dan 25KT.")
 
     if not df.empty:
         df_fc = df.copy()
@@ -333,7 +333,6 @@ with tab_forecast:
         nama_bulan_dict = {1:'Jan', 2:'Feb', 3:'Mar', 4:'Apr', 5:'May', 6:'Jun', 7:'Jul', 8:'Aug', 9:'Sep', 10:'Oct', 11:'Nov', 12:'Dec'}
         nama_bulan = nama_bulan_dict[bulan_pilihan]
 
-        # Inisialisasi Session State agar ingatan input manual tersimpan per bulan
         if 'forecast_targets' not in st.session_state:
             st.session_state['forecast_targets'] = {}
         if bulan_pilihan not in st.session_state['forecast_targets']:
@@ -360,30 +359,36 @@ with tab_forecast:
         for v in list_vendor_fc:
             d_v = df_fc[df_fc['Vendor'].astype(str) == v]
 
-            # Ambil nilai Forecast hasil inputan manual
             forecast_val = st.session_state['forecast_targets'][bulan_pilihan][v]
             
-            # Logika QTY FIRST PO: QTY PR (jika bulan sesuai) + QTY PO (jika tgl out kosong / bulan 0)
+            # Logika QTY FIRST PO
             qty_pr_bulan = d_v[d_v['BULAN_OUT'] == bulan_pilihan]['QTY_PR_NUM'].sum()
             qty_po_kosong = d_v[d_v['BULAN_OUT'] == 0]['QTY_NUM'].sum()
             first_po_qty = qty_pr_bulan + qty_po_kosong
 
-            on_site_empty = len(d_v[(d_v['STATUS'].astype(str).str.upper() == 'EMPTY') & (d_v['LOCATION'].astype(str).str.upper() == 'WAREHOUSE')])
-            on_site_full = len(d_v[(d_v['STATUS'].astype(str).str.upper() == 'FULL') & (d_v['LOCATION'].astype(str).str.upper() == 'WAREHOUSE')])
+            # --- LOGIKA BARU ON SITE (WAREHOUSE & 25KT) ---
+            df_onsite = d_v[d_v['LOCATION'].astype(str).str.upper().isin(['WAREHOUSE', '25KT'])]
+            
+            on_site_empty = len(df_onsite[df_onsite['STATUS'].astype(str).str.upper() == 'EMPTY'])
+            on_site_full_unit = len(df_onsite[df_onsite['STATUS'].astype(str).str.upper() == 'FULL'])
+            on_site_full_kg = df_onsite[df_onsite['STATUS'].astype(str).str.upper() == 'FULL']['QTY_NUM'].sum()
 
+            # Inbound Koe - Wtr
             d_koe = d_v[d_v['LOCATION'].astype(str).str.upper() == 'INBOUND- KOE WTR']
             koe_iso = len(d_koe)
             koe_kg = d_koe['QTY_NUM'].sum()
 
+            # Inbound Sub - Koe
             d_sub = d_v[d_v['LOCATION'].astype(str).str.upper() == 'INBOUND - SUB KOE']
             sub_iso = len(d_sub)
             sub_kg = d_sub['QTY_NUM'].sum()
             
+            # Inbound Hub Sub
             d_hub = d_v[d_v['LOCATION'].astype(str).str.upper() == 'INBOUND HUB SUB']
             hub_iso = len(d_hub)
             hub_kg = d_hub['QTY_NUM'].sum()
             
-            # Outbound Isotank (Diringkas jadi 1)
+            # Outbound Isotank
             outbound_iso = len(d_v[d_v['LOCATION'].astype(str).str.upper().str.contains('OUTBOUND')])
             
             # Vendor PO has Supplied
@@ -394,10 +399,11 @@ with tab_forecast:
             
             supplied_kg = d_v[mask_supplied]['QTY_NUM'].sum()
             difference = supplied_kg - first_po_qty
-            total_rotation = on_site_empty + on_site_full + koe_iso + sub_iso + hub_iso + outbound_iso
+            total_rotation = on_site_empty + on_site_full_unit + koe_iso + sub_iso + hub_iso + outbound_iso
 
             data_rows.append([
-                v, forecast_val, first_po_qty, on_site_empty, on_site_full, 
+                v, forecast_val, first_po_qty, 
+                on_site_empty, on_site_full_unit, on_site_full_kg, 
                 koe_iso, koe_kg, sub_iso, sub_kg, hub_iso, hub_kg,
                 outbound_iso, supplied_kg, difference, total_rotation
             ])
@@ -407,9 +413,10 @@ with tab_forecast:
             total_row.append(sum(row[i] for row in data_rows))
         data_rows.append(total_row)
 
+        # --- 6. STRUKTUR KOLOM BERTINGKAT (MULTI-INDEX) SENSOR KONDISI BARU ---
         kolom_bertingkat = pd.MultiIndex.from_tuples([
             ('Vendor', ''), ('Forecast ( Kg )', ''), (f"Qty First PO {nama_bulan}'26", ''),
-            ('On Site', 'Empty'), ('On Site', 'Full'),
+            ('On Site', 'Empty'), ('On Site', 'Full'), ('On Site', 'Qty (Kg)'),
             ('Inbound Koe - Wtr', 'Qty Isotank'), ('Inbound Koe - Wtr', 'Qty (Kg)'),
             ('Inbound Sub - Koe', 'Qty Isotank'), ('Inbound Sub - Koe', 'Qty ( Kg )'),
             ('Inbound Hub Sub', 'Qty Isotank'), ('Inbound Hub Sub', 'Qty ( Kg )'),
