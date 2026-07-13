@@ -274,13 +274,14 @@ with tab_dashboard:
             file_name="Data_Detail_Isotank.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+        
 # --- BAGIAN FORECAST REAGENT (Mengambil dari Tab Summary) ---
 with tab_forecast:
     st.markdown('<div class="main-title">Tabel Forecast Reagent</div>', unsafe_allow_html=True)
     st.info("💡 **Petunjuk:** Forecast (Kg) bisa diinput manual di menu *'Atur Target Forecast'* di bawah. Outbound diringkas jadi 1 kolom, dan Qty First PO menggunakan gabungan dari QTY PR (jika bulan sesuai) & QTY PO (jika tgl out kosong).")
 
-    if not df_summary.empty:
-        df_fc = df_summary.copy()
+    if not df.empty:
+        df_fc = df.copy()
         
         # 1. KONVERSI DATA ANGKA
         if 'QTY' in df_fc.columns:
@@ -296,13 +297,13 @@ with tab_forecast:
         # 2. EKSTRAK BULAN
         if 'DATE IN' in df_fc.columns:
             df_fc['DATE_IN_DT'] = pd.to_datetime(df_fc['DATE IN'], errors='coerce')
-            df_fc['BULAN_IN'] = df_fc['DATE_IN_DT'].dt.month
+            df_fc['BULAN_IN'] = df_fc['DATE_IN_DT'].dt.month.fillna(0).astype(int)
         else:
             df_fc['BULAN_IN'] = 0
             
         if 'DATE OUT' in df_fc.columns:
             df_fc['DATE_OUT_DT'] = pd.to_datetime(df_fc['DATE OUT'], errors='coerce')
-            df_fc['BULAN_OUT'] = df_fc['DATE_OUT_DT'].dt.month
+            df_fc['BULAN_OUT'] = df_fc['DATE_OUT_DT'].dt.month.fillna(0).astype(int)
         else:
             df_fc['BULAN_OUT'] = 0
 
@@ -332,7 +333,7 @@ with tab_forecast:
         nama_bulan_dict = {1:'Jan', 2:'Feb', 3:'Mar', 4:'Apr', 5:'May', 6:'Jun', 7:'Jul', 8:'Aug', 9:'Sep', 10:'Oct', 11:'Nov', 12:'Dec'}
         nama_bulan = nama_bulan_dict[bulan_pilihan]
 
-        # Inisialisasi Session State agar ingatan input manual tersimpan
+        # Inisialisasi Session State agar ingatan input manual tersimpan per bulan
         if 'forecast_targets' not in st.session_state:
             st.session_state['forecast_targets'] = {}
         if bulan_pilihan not in st.session_state['forecast_targets']:
@@ -359,10 +360,10 @@ with tab_forecast:
         for v in list_vendor_fc:
             d_v = df_fc[df_fc['Vendor'].astype(str) == v]
 
-            # Ambil nilai Forecast hasil inputan manual tadi
+            # Ambil nilai Forecast hasil inputan manual
             forecast_val = st.session_state['forecast_targets'][bulan_pilihan][v]
             
-            # Logika QTY FIRST PO: Jika di bulan tersebut (QTY PR) + Jika Tgl Out Kosong (QTY PO)
+            # Logika QTY FIRST PO: QTY PR (jika bulan sesuai) + QTY PO (jika tgl out kosong / bulan 0)
             qty_pr_bulan = d_v[d_v['BULAN_OUT'] == bulan_pilihan]['QTY_PR_NUM'].sum()
             qty_po_kosong = d_v[d_v['BULAN_OUT'] == 0]['QTY_NUM'].sum()
             first_po_qty = qty_pr_bulan + qty_po_kosong
@@ -382,7 +383,7 @@ with tab_forecast:
             hub_iso = len(d_hub)
             hub_kg = d_hub['QTY_NUM'].sum()
             
-            # Outbound Isotank (Semua yang berbau Outbound digabung)
+            # Outbound Isotank (Diringkas jadi 1)
             outbound_iso = len(d_v[d_v['LOCATION'].astype(str).str.upper().str.contains('OUTBOUND')])
             
             # Vendor PO has Supplied
@@ -438,7 +439,7 @@ with tab_forecast:
         st.dataframe(tabel_styled, use_container_width=True, hide_index=True)
     else:
         st.warning("Data belum tersedia untuk membuat tabel Forecast.")
-
+        
 # --- BAGIAN FORM INPUT (AUTOFILL & UPDATE) ---
 with tab_input:
     st.subheader("Form Input / Update Status Tangki")
