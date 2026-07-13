@@ -278,10 +278,10 @@ with tab_dashboard:
 # --- BAGIAN FORECAST REAGENT (Mengambil dari Tab Summary) ---
 with tab_forecast:
     st.markdown('<div class="main-title">Tabel Forecast Reagent</div>', unsafe_allow_html=True)
-    st.info("💡 **Petunjuk:** Berikut total forecast dan monitoring ACID & ESCAID.")
+    st.info("💡 **Petunjuk:** Forecast (Kg) bisa diinput manual di menu expander bawah. Outbound diringkas jadi 1 kolom. Tabel otomatis diwarnai seperti format Excel Anda.")
 
-    if not df.empty:
-        df_fc = df.copy()
+    if not df_summary.empty:
+        df_fc = df_summary.copy()
         
         # 1. KONVERSI DATA ANGKA
         if 'QTY' in df_fc.columns:
@@ -325,7 +325,7 @@ with tab_forecast:
             df_fc = df_fc[df_fc[kol_reag].astype(str).str.upper() == reagent_pilihan]
 
         # 4. PERSIAPAN DATA VENDOR & INPUT FORECAST MANUAL
-        list_vendor_fc = ["ROL100IDR", "DWI101IDR", "ENERGI JAYA INOVASI, PT", "ADI106IDR"]
+        list_vendor_fc = ["ROLIMEX", "DWIJAYA", "ENERGI JAYA INOVASI PT", "ADIMITRA"]
         if 'Vendor' in df_fc.columns:
             vendor_tambahan = [v for v in df_fc['Vendor'].astype(str).unique() if v.strip() != '' and v not in list_vendor_fc and v != 'nan']
             list_vendor_fc.extend(vendor_tambahan)
@@ -337,9 +337,12 @@ with tab_forecast:
             st.session_state['forecast_targets'] = {}
         if bulan_pilihan not in st.session_state['forecast_targets']:
             st.session_state['forecast_targets'][bulan_pilihan] = {
-                "ROL100IDR": 200000,
+                "ROLIMEX": 200000,
+                "DWIJAYA": 250000,
+                "ENERGI JAYA INOVASI PT": 200000,
+                "ADIMITRA": 150000,
+                "ROL100IDR": 200000, # Proteksi jika nama vendor IDR masih tersisa
                 "DWI101IDR": 250000,
-                "ENERGI JAYA INOVASI, PT": 200000,
                 "ADI106IDR": 150000
             }
 
@@ -366,24 +369,21 @@ with tab_forecast:
             qty_po_kosong = d_v[d_v['BULAN_OUT'] == 0]['QTY_NUM'].sum()
             first_po_qty = qty_pr_bulan + qty_po_kosong
 
-            # --- LOGIKA BARU ON SITE (WAREHOUSE & 25KT) ---
+            # Logika On Site
             df_onsite = d_v[d_v['LOCATION'].astype(str).str.upper().isin(['WAREHOUSE', '25KT'])]
-            
             on_site_empty = len(df_onsite[df_onsite['STATUS'].astype(str).str.upper() == 'EMPTY'])
             on_site_full_unit = len(df_onsite[df_onsite['STATUS'].astype(str).str.upper() == 'FULL'])
             on_site_full_kg = df_onsite[df_onsite['STATUS'].astype(str).str.upper() == 'FULL']['QTY_NUM'].sum()
 
-            # Inbound Koe - Wtr
+            # Inbound
             d_koe = d_v[d_v['LOCATION'].astype(str).str.upper() == 'INBOUND- KOE WTR']
             koe_iso = len(d_koe)
             koe_kg = d_koe['QTY_NUM'].sum()
 
-            # Inbound Sub - Koe
             d_sub = d_v[d_v['LOCATION'].astype(str).str.upper() == 'INBOUND - SUB KOE']
             sub_iso = len(d_sub)
             sub_kg = d_sub['QTY_NUM'].sum()
             
-            # Inbound Hub Sub
             d_hub = d_v[d_v['LOCATION'].astype(str).str.upper() == 'INBOUND HUB SUB']
             hub_iso = len(d_hub)
             hub_kg = d_hub['QTY_NUM'].sum()
@@ -413,35 +413,54 @@ with tab_forecast:
             total_row.append(sum(row[i] for row in data_rows))
         data_rows.append(total_row)
 
-        # --- 6. STRUKTUR KOLOM BERTINGKAT (MULTI-INDEX) SENSOR KONDISI BARU ---
+        # --- 6. STRUKTUR KOLOM BERTINGKAT (PERSIS GAMBAR) ---
         kolom_bertingkat = pd.MultiIndex.from_tuples([
-            ('Vendor', ''), ('Forecast ( Kg )', ''), (f"Qty First PO {nama_bulan}'26", ''),
-            ('On Site', 'Empty'), ('On Site', 'Full'), ('On Site', 'Qty (Kg)'),
-            ('Inbound Koe - Wtr', 'Qty Isotank'), ('Inbound Koe - Wtr', 'Qty (Kg)'),
-            ('Inbound Sub - Koe', 'Qty Isotank'), ('Inbound Sub - Koe', 'Qty ( Kg )'),
-            ('Inbound Hub Sub', 'Qty Isotank'), ('Inbound Hub Sub', 'Qty ( Kg )'),
+            ('Vendor', ''), 
+            ('Forecast ( Kg )', ''), 
+            (f"Qty First PO {nama_bulan}'26", ''),
+            ('On Site', 'Empty'), 
+            ('On Site', 'Full'), 
+            ('On Site', 'Qty (Kg)'),
+            ('Inbound Koe - Wtr', 'Qty Isotank'), 
+            ('Inbound Koe - Wtr', 'Qty (Kg)'),
+            ('Inbound Sub - Koe', 'Qty Isotank'), 
+            ('Inbound Sub - Koe', 'Qty ( Kg )'),
+            ('Inbound Hub Sub', 'Qty Isotank'), 
+            ('Inbound Hub Sub', 'Qty ( Kg )'),
             ('Outbound Isotank', ''),
             (f"Vendor PO {nama_bulan}'26", 'has Supplied (Kg)'), 
-            ('Difference', 'Qty ( Kg )'), ('Total Isotank Rotation', '')
+            ('Difference', 'Qty ( Kg )'), 
+            ('Total Isotank', 'Rotation')
         ])
 
         df_tabel_fc = pd.DataFrame(data_rows, columns=kolom_bertingkat)
         
+        # --- 7. FORMATTING & MEWARNAI TABEL MIRIP EXCEL ---
         def format_angka_excel(val):
             if pd.isna(val) or val == 0: return "-"
             elif isinstance(val, (int, float)): return "{:,.0f}".format(val)
             return val
 
-        def warnai_merah_hijau(val):
+        def warnai_difference(val):
             if isinstance(val, (int, float)):
-                if val < 0: return 'color: #ff4b4b;'
-                elif val > 0: return 'color: #2ecc71;'
-            return ''
+                if val < 0: return 'background-color: #f8cbad; color: #c00000;' # Merah
+                elif val > 0: return 'background-color: #c6efce; color: #00b050;' # Hijau
+            return 'background-color: #ffff00; color: black;' # Kuning Default
+
+        tabel_styled = df_tabel_fc.style.format(format_angka_excel)
+        
+        # Mewarnai kolom persis seperti di gambar
+        tabel_styled = tabel_styled.set_properties(**{'background-color': '#fce4d6', 'color': 'black'}, subset=[('On Site', 'Empty'), ('On Site', 'Full'), ('On Site', 'Qty (Kg)')])
+        tabel_styled = tabel_styled.set_properties(**{'background-color': '#fff2cc', 'color': 'black'}, subset=[('Inbound Koe - Wtr', 'Qty Isotank'), ('Inbound Koe - Wtr', 'Qty (Kg)')])
+        tabel_styled = tabel_styled.set_properties(**{'background-color': '#e2efda', 'color': 'black'}, subset=[('Inbound Sub - Koe', 'Qty Isotank'), ('Inbound Sub - Koe', 'Qty ( Kg )')])
+        tabel_styled = tabel_styled.set_properties(**{'background-color': '#ddebf7', 'color': 'black'}, subset=[('Inbound Hub Sub', 'Qty Isotank'), ('Inbound Hub Sub', 'Qty ( Kg )')])
+        tabel_styled = tabel_styled.set_properties(**{'background-color': '#ededed', 'color': 'black'}, subset=[('Outbound Isotank', '')])
+        tabel_styled = tabel_styled.set_properties(**{'background-color': '#ffff00', 'color': 'black'}, subset=[(f"Vendor PO {nama_bulan}'26", 'has Supplied (Kg)')])
 
         try:
-            tabel_styled = df_tabel_fc.style.format(format_angka_excel).map(warnai_merah_hijau, subset=[('Difference', 'Qty ( Kg )')])
+            tabel_styled = tabel_styled.map(warnai_difference, subset=[('Difference', 'Qty ( Kg )')])
         except AttributeError:
-            tabel_styled = df_tabel_fc.style.format(format_angka_excel).applymap(warnai_merah_hijau, subset=[('Difference', 'Qty ( Kg )')])
+            tabel_styled = tabel_styled.applymap(warnai_difference, subset=[('Difference', 'Qty ( Kg )')])
         
         st.dataframe(tabel_styled, use_container_width=True, hide_index=True)
     else:
