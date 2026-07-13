@@ -278,7 +278,7 @@ with tab_dashboard:
 # --- BAGIAN FORECAST REAGENT (Mengambil dari Tab Summary) ---
 with tab_forecast:
     st.markdown('<div class="main-title">Tabel Forecast Reagent</div>', unsafe_allow_html=True)
-    st.info("💡 **Petunjuk:** Kolom On Site sekarang menghitung total unit (Empty & Full) serta Qty (Kg) khusus untuk status Full di lokasi WAREHOUSE dan 25KT.")
+    st.info("💡 **Petunjuk:** Berikut total forecast dan monitoring ACID & ESCAID.")
 
     if not df.empty:
         df_fc = df.copy()
