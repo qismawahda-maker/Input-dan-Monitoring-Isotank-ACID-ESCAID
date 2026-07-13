@@ -126,9 +126,10 @@ def safe_float(val, default=0.0):
         return default
 
 # ==========================================
-# 4. TAMPILAN DASHBOARD & FORM INPUT
+# 4. TAMPILAN DASHBOARD, FORECAST & FORM INPUT
 # ==========================================
-tab_dashboard, tab_input = st.tabs(["📊 Lihat Dashboard", "📝 Input Data Baru / Update"])
+# Menambahkan tab baru untuk Forecast
+tab_dashboard, tab_forecast, tab_input = st.tabs(["📊 Lihat Dashboard", "📈 Forecast & Rekap", "📝 Input Data Baru / Update"])
 
 # --- BAGIAN DASHBOARD ---
 with tab_dashboard:
@@ -273,6 +274,127 @@ with tab_dashboard:
             file_name="Data_Detail_Isotank.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+
+# --- BAGIAN FORECAST & REKAP ---
+with tab_forecast:
+    st.subheader("📋 Tabel Forecast Reagent")
+    st.info("💡 **Total PO** dihitung dari jumlah QTY PR berdasarkan bulan pada DATE OUT. **Difference** = Total Qty Inbound (Non-Empty) - Total PO.")
+
+    if not df.empty:
+        df_fc = df.copy()
+        
+        # 1. Konversi data angka agar aman dijumlahkan
+        if 'QTY' in df_fc.columns:
+            df_fc['QTY_NUM'] = pd.to_numeric(df_fc['QTY'].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
+        else:
+            df_fc['QTY_NUM'] = 0.0
+            
+        if 'QTY PR' in df_fc.columns:
+            df_fc['QTY_PR_NUM'] = pd.to_numeric(df_fc['QTY PR'].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
+        else:
+            df_fc['QTY_PR_NUM'] = 0.0
+
+        # 2. Ekstrak Bulan dari kolom DATE OUT
+        if 'DATE OUT' in df_fc.columns:
+            df_fc['DATE_OUT_DT'] = pd.to_datetime(df_fc['DATE OUT'], errors='coerce')
+            df_fc['BULAN_OUT'] = df_fc['DATE_OUT_DT'].dt.month
+        else:
+            df_fc['BULAN_OUT'] = 0
+
+        # 3. Widget Filter Khusus Forecast
+        col_fc1, col_fc2 = st.columns(2)
+        
+        kol_reag = next((col for col in df_fc.columns if 'REAGENT' in str(col).upper()), None)
+        list_opt_reagent = ["Semua Reagent"]
+        if kol_reag:
+            list_opt_reagent = ["Semua Reagent"] + sorted(df_fc[kol_reag].astype(str).str.upper().unique().tolist())
+            
+        with col_fc1:
+            reagent_pilihan = st.selectbox("Tampilkan Tabel Untuk Reagent:", list_opt_reagent, key="fc_reagent")
+            
+        with col_fc2:
+            bulan_pilihan = st.selectbox("Pilih Bulan Target (Untuk hitung Total PO):", 
+                                         options=[1,2,3,4,5,6,7,8,9,10,11,12], 
+                                         index=datetime.now().month - 1)
+
+        # Menerapkan Filter Reagent
+        if reagent_pilihan != "Semua Reagent" and kol_reag:
+            df_fc = df_fc[df_fc[kol_reag].astype(str).str.upper() == reagent_pilihan]
+
+        # 4. Susun Daftar Vendor
+        list_vendor_fc = ["ROL100IDR", "DWI101IDR", "ENERGI JAYA INOVASI, PT", "ADI106IDR"]
+        if 'Vendor' in df_fc.columns:
+            vendor_tambahan = [v for v in df_fc['Vendor'].astype(str).unique() if v.strip() != '' and v not in list_vendor_fc and v != 'nan']
+            list_vendor_fc.extend(vendor_tambahan)
+
+        # 5. Lakukan Kalkulasi Loop per Vendor
+        data_rows = []
+        for v in list_vendor_fc:
+            d_v = df_fc[df_fc['Vendor'].astype(str) == v]
+
+            # Hitung On Site (Empty & Full di Warehouse)
+            on_site_empty = len(d_v[d_v['STATUS'].astype(str).str.upper() == 'EMPTY'])
+            on_site_full = len(d_v[(d_v['STATUS'].astype(str).str.upper() == 'FULL') & (d_v['LOCATION'].astype(str).str.upper() == 'WAREHOUSE')])
+
+            # Hitung Inbound Koe - Wtr
+            d_koe = d_v[d_v['LOCATION'].astype(str).str.upper() == 'INBOUND- KOE WTR']
+            koe_iso = len(d_koe)
+            koe_kg = d_koe['QTY_NUM'].sum()
+            koe_kg_non_empty = d_koe[d_koe['STATUS'].astype(str).str.upper() != 'EMPTY']['QTY_NUM'].sum()
+
+            # Hitung Inbound Sub - Koe
+            d_sub = d_v[d_v['LOCATION'].astype(str).str.upper() == 'INBOUND - SUB KOE']
+            sub_iso = len(d_sub)
+            sub_kg = d_sub['QTY_NUM'].sum()
+            sub_kg_non_empty = d_sub[d_sub['STATUS'].astype(str).str.upper() != 'EMPTY']['QTY_NUM'].sum()
+
+            # Hitung PO & Difference
+            d_po = d_v[d_v['BULAN_OUT'] == bulan_pilihan]
+            total_po = d_po['QTY_PR_NUM'].sum()
+            difference = (koe_kg_non_empty + sub_kg_non_empty) - total_po
+
+            data_rows.append([
+                v, on_site_empty, on_site_full, 
+                koe_iso, koe_kg, 
+                sub_iso, sub_kg, 
+                total_po, difference
+            ])
+
+        # Hitung Baris "TOTAL" Bawah
+        total_row = ['TOTAL']
+        for i in range(1, len(data_rows[0])):
+            total_row.append(sum(row[i] for row in data_rows))
+        data_rows.append(total_row)
+
+        # 6. Buat Struktur Kolom Bertingkat (MultiIndex)
+        kolom_bertingkat = pd.MultiIndex.from_tuples([
+            ('Vendor', ''),
+            ('On Site', 'Empty (Unit)'), 
+            ('On Site', 'Full (Unit)'),
+            ('Inbound Koe - Wtr', 'Qty Isotank'), 
+            ('Inbound Koe - Wtr', 'Qty (Kg)'),
+            ('Inbound Sub - Koe', 'Qty Isotank'), 
+            ('Inbound Sub - Koe', 'Qty (Kg)'),
+            (f'Target PO Bulan {bulan_pilihan}', 'Total PO (Kg)'), 
+            (f'Target PO Bulan {bulan_pilihan}', 'Difference (Kg)')
+        ])
+
+        # Generate DataFrame dan Tampilkan
+        df_tabel_fc = pd.DataFrame(data_rows, columns=kolom_bertingkat)
+        
+        st.dataframe(
+            df_tabel_fc.style.format({
+                ('Inbound Koe - Wtr', 'Qty (Kg)'): "{:,.0f}",
+                ('Inbound Sub - Koe', 'Qty (Kg)'): "{:,.0f}",
+                (f'Target PO Bulan {bulan_pilihan}', 'Total PO (Kg)'): "{:,.0f}",
+                (f'Target PO Bulan {bulan_pilihan}', 'Difference (Kg)'): "{:,.0f}"
+            }), 
+            use_container_width=True, 
+            hide_index=True
+        )
+    else:
+        st.warning("Data belum tersedia untuk membuat tabel Forecast.")
+
 
 # --- BAGIAN FORM INPUT (AUTOFILL & UPDATE) ---
 with tab_input:
