@@ -194,7 +194,7 @@ with tab_dashboard:
 # --- BAGIAN FORECAST & SUMMARY (MENGGUNAKAN df DEDUPLIKASI) ---
 with tab_forecast:
     st.markdown('<div class="main-title">Tabel Forecast Reagent</div>', unsafe_allow_html=True)
-    st.info("💡 **Petunjuk:** Forecast (Kg) bisa diinput manual di menu expander bawah. Outbound diringkas jadi 1 kolom. Tabel otomatis diwarnai seperti format Excel Anda.")
+    st.info("💡 **Petunjuk:** Forecast (Kg) bisa diinput manual di menu bawah berikut.")
 
     if not df.empty:
         df_fc = df.copy()
@@ -235,7 +235,7 @@ with tab_forecast:
             df_fc = df_fc[df_fc[kol_reag].astype(str).str.upper() == reagent_pilihan]
 
         # 4. PERSIAPAN DATA VENDOR & INPUT FORECAST MANUAL
-        list_vendor_fc = ["ROLIMEX", "DWIJAYA", "ENERGI JAYA INOVASI PT", "ADIMITRA"]
+        list_vendor_fc = ["ROL100IDR", "DWI101IDR", "ENERGI JAYA INOVASI PT", "ADI106IDR"]
         if 'Vendor' in df_fc.columns:
             vendor_tambahan = [v for v in df_fc['Vendor'].astype(str).unique() if v.strip() != '' and v not in list_vendor_fc and v != 'nan']
             list_vendor_fc.extend(vendor_tambahan)
@@ -247,10 +247,7 @@ with tab_forecast:
             st.session_state['forecast_targets'] = {}
         if bulan_pilihan not in st.session_state['forecast_targets']:
             st.session_state['forecast_targets'][bulan_pilihan] = {
-                "ROLIMEX": 200000,
-                "DWIJAYA": 250000,
                 "ENERGI JAYA INOVASI PT": 200000,
-                "ADIMITRA": 150000,
                 "ROL100IDR": 200000, 
                 "DWI101IDR": 250000,
                 "ADI106IDR": 150000
