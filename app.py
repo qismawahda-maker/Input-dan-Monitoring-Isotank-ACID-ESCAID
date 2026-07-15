@@ -13,15 +13,38 @@ st.set_page_config(page_title="MONITORING ISOTANK ACID & ESCAID", page_icon="�
 
 st.markdown("""
     <style>
-        .main-title { font-size: 42px !important; font-weight: bold; margin-bottom: 20px; }
-        .stMarkdown h3, .stMarkdown h5 { font-size: 26px !important; font-weight: bold !important; }
-        .stSelectbox label, .stTextInput label, .stNumberInput label, .stDateInput label { font-size: 20px !important; font-weight: 500 !important; }
-        .stSelectbox div, .stTextInput div, .stNumberInput div, .stDateInput div { font-size: 18px !important; }
-        .stTabs button { font-size: 22px !important; }
-        [data-testid="stMetricValue"] { font-size: 36px !important; }
-        [data-testid="stMetricLabel"] { font-size: 18px !important; }
-        .stDataFrame div { font-size: 16px !important; }
+        .main-title {
+            font-size: 42px !important;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+        .stMarkdown h3, .stMarkdown h5 {
+            font-size: 26px !important;
+            font-weight: bold !important;
+        }
+        .stSelectbox label, .stTextInput label, .stNumberInput label, .stDateInput label {
+            font-size: 20px !important;
+            font-weight: 500 !important;
+        }
+        .stSelectbox div, .stTextInput div, .stNumberInput div, .stDateInput div {
+            font-size: 18px !important;
+        }
+        .stTabs button {
+            font-size: 22px !important;
+        }
+        [data-testid="stMetricValue"] {
+            font-size: 36px !important;
+        }
+        [data-testid="stMetricLabel"] {
+            font-size: 18px !important;
+        }
+        .stDataFrame div {
+            font-size: 16px !important;
+        }
         
+        /* ==========================================
+           KODE CSS AMPUH MENYEMBUNYIKAN MENU & IKON GITHUB
+           ========================================== */
         #MainMenu {visibility: hidden;}
         header {visibility: hidden;}
         [data-testid="stToolbar"] {visibility: hidden !important; display: none !important;}
@@ -40,10 +63,14 @@ NAMA_SHEET = 'ACID & ESCAID STATUS '
 # ==========================================
 @st.cache_resource
 def get_gsheets_connection():
-    scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
     s = st.secrets["gcp_service_account"]
     credentials = Credentials.from_service_account_info(s, scopes=scopes)
-    return gspread.authorize(credentials)
+    client = gspread.authorize(credentials)
+    return client
 
 # ==========================================
 # 3. FUNGSI AMBIL DATA
@@ -64,39 +91,52 @@ def ambil_data():
         st.error(f"❌ Gagal membaca Google Sheets. Detail: {e}")
         return pd.DataFrame()
 
+# Kita ambil data mentah penuh untuk fungsi pencarian riwayat
 df_mentah = ambil_data()
 
-# DEDUPLIKASI UNTUK DASHBOARD & FORECAST (MIRIP VLOOKUP LAST STATUS)
+# Untuk visualisasi Dashboard, tetap gunakan data unik terbaru per TANK ID
 if not df_mentah.empty and 'TANK ID' in df_mentah.columns:
     df = df_mentah[df_mentah['TANK ID'].astype(str).str.strip() != ''].copy()
     df = df.drop_duplicates(subset=['TANK ID'], keep='last')
 else:
     df = df_mentah.copy()
 
+# Helper untuk mengubah string tanggal ke objek date Python
 def konversi_ke_date(tgl_str):
-    if not tgl_str or tgl_str.strip() == "": return None
+    if not tgl_str or tgl_str.strip() == "":
+        return None
     for fmt in ('%Y-%m-%d', '%m/%d/%Y', '%d/%m/%Y'):
-        try: return datetime.strptime(tgl_str.strip(), fmt).date()
-        except ValueError: continue
+        try:
+            return datetime.strptime(tgl_str.strip(), fmt).date()
+        except ValueError:
+            continue
     return None
 
+# FUNGSI PENYELAMAT: Mengubah string dari Sheets ke float secara aman
 def safe_float(val, default=0.0):
-    if val is None: return default
+    if val is None:
+        return default
+    # Bersihkan spasi dan hapus tanda koma ribuan jika ada (misal: "25,000" -> "25000")
     val_str = str(val).strip().replace(',', '')
-    if not val_str or val_str == "": return default
-    try: return float(val_str)
-    except ValueError: return default
+    if not val_str or val_str == "":
+        return default
+    try:
+        return float(val_str)
+    except ValueError:
+        return default
 
 # ==========================================
 # 4. TAMPILAN DASHBOARD, FORECAST & FORM INPUT
 # ==========================================
-tab_dashboard, tab_forecast, tab_input = st.tabs(["📊 Lihat Dashboard", "📈 Forecast & Summary", "📝 Input Data Baru / Update"])
+# Menambahkan tab baru untuk Forecast
+tab_dashboard, tab_forecast, tab_input = st.tabs(["📊 Lihat Dashboard", "📈 Forecast & Rekap", "📝 Input Data Baru / Update"])
 
 # --- BAGIAN DASHBOARD ---
 with tab_dashboard:
     if df.empty:
         st.warning("⚠️ Data kosong. Pastikan baris ke-1 di Spreadsheet Anda berisi judul kolom.")
     else:
+        # FILTER PENCARIAN
         st.markdown("### 🔍 Filter Pencarian")
         kolom_reagent = next((col for col in df.columns if 'REAGENT' in str(col).upper()), None)
         
@@ -128,6 +168,7 @@ with tab_dashboard:
 
         st.divider()
 
+        # RINGKASAN DATA
         st.subheader("Ringkasan Kondisi Tangki")
         col_tot1, col_tot2 = st.columns(2)
         total_tangki = len(df_tampil)
@@ -135,7 +176,8 @@ with tab_dashboard:
         if 'QTY' in df_tampil.columns:
             df_tampil['QTY_NUM'] = pd.to_numeric(df_tampil['QTY'].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
             total_volume = df_tampil['QTY_NUM'].sum()
-        else: total_volume = 0
+        else:
+            total_volume = 0
             
         col_tot1.metric("Total Keseluruhan Unit Isotank", total_tangki)
         col_tot2.metric("Total Keseluruhan Volume (QTY)", f"{total_volume:,.0f}")
@@ -148,7 +190,8 @@ with tab_dashboard:
             jml_empty = len(status_series[status_series == 'EMPTY'])
             jml_install = len(status_series[status_series == 'INSTALL'])
             jml_vendor = len(status_series[status_series == 'VENDOR'])
-        else: jml_full = jml_empty = jml_install = jml_vendor = 0
+        else:
+            jml_full = jml_empty = jml_install = jml_vendor = 0
             
         c1.metric("Status FULL", jml_full)
         c2.metric("Status EMPTY", jml_empty)
@@ -157,6 +200,9 @@ with tab_dashboard:
         
         st.divider()
 
+        # ==========================================
+        # GRAFIK VISUAL (UKURAN ANGKA & FONT DIPERBESAR)
+        # ==========================================
         kolom_grafik1, kolom_grafik2 = st.columns(2)
         with kolom_grafik1:
             st.markdown("**Perbandingan Status Tangki Keseluruhan**")
@@ -166,21 +212,54 @@ with tab_dashboard:
                 fig1 = px.pie(data_status, names='Status', values='Jumlah', hole=0.4)
                 fig1.update_traces(textposition='inside', textinfo='value+percent')
                 st.plotly_chart(fig1, use_container_width=True)
-            else: st.info("Tidak ada data untuk grafik ini.")
+            else:
+                st.info("Tidak ada data untuk grafik ini.")
                 
         with kolom_grafik2:
             st.markdown("**Rincian Status Tangki di Setiap Lokasi**")
             if 'LOCATION' in df_tampil.columns and 'STATUS' in df_tampil.columns and total_tangki > 0:
+                # Mengelompokkan data berdasarkan kombinasi LOKASI dan STATUS
                 data_lokasi_status = df_tampil.groupby(['LOCATION', 'STATUS']).size().reset_index(name='Jumlah')
                 data_lokasi_status.columns = ['Lokasi', 'Status', 'Jumlah']
-                fig2 = px.bar(data_lokasi_status, x='Lokasi', y='Jumlah', color='Status', barmode='group', text='Jumlah', labels={'Jumlah': 'Jumlah Tangki'})
-                fig2.update_traces(textposition='outside', textfont_size=15, textfont_color='white')
-                fig2.update_layout(xaxis_title="Lokasi", yaxis_title="Jumlah Unit Isotank", legend_title="Status Tangki", font=dict(size=16), xaxis=dict(tickfont=dict(size=14)), yaxis=dict(tickfont=dict(size=14)), uniformtext=dict(mode='hide', minsize=18))
+                
+                # Membuat grafik batang berkelompok
+                fig2 = px.bar(
+                    data_lokasi_status, 
+                    x='Lokasi', 
+                    y='Jumlah', 
+                    color='Status',      
+                    barmode='group',     
+                    text='Jumlah',
+                    labels={'Jumlah': 'Jumlah Tangki'}
+                )
+                
+                # 1. Memperbesar tulisan angka di atas batang tangki
+                fig2.update_traces(
+                    textposition='outside', 
+                    textfont_size=15,       # << Ukuran angka di atas batang
+                    textfont_color='white'  # Menyesuaikan warna teks angka
+                )
+                
+                # 2. Memperbesar tulisan Label Sumbu X, Y, Judul, dan Legenda
+                fig2.update_layout(
+                    xaxis_title="Lokasi",
+                    yaxis_title="Jumlah Unit Isotank",
+                    legend_title="Status Tangki",
+                    font=dict(
+                        size=16             # << Ukuran font teks label sumbu & legenda diperbesar
+                    ),
+                    xaxis=dict(tickfont=dict(size=14)), 
+                    yaxis=dict(tickfont=dict(size=14)), 
+                    uniformtext=dict(mode='hide', minsize=18) 
+                )
+                
                 st.plotly_chart(fig2, use_container_width=True)
-            else: st.info("Tidak ada data untuk grafik lokasi dan status.")
+            else:
+                st.info("Tidak ada data untuk grafik lokasi dan status.")
                 
         st.divider()
 
+        # DATA DETAIL & EXPORT XLSX
         st.subheader("Data Detail Keseluruhan")
         if 'QTY_NUM' in df_tampil.columns:
             df_tampil = df_tampil.drop(columns=['QTY_NUM'])
@@ -189,35 +268,40 @@ with tab_dashboard:
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
             df_tampil.to_excel(writer, index=False, sheet_name='Monitoring Isotank')
-        st.download_button("📥 Download Data Detail (Format Excel .xlsx)", data=buffer.getvalue(), file_name="Data_Detail_Isotank.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.download_button(
+            label="📥 Download Data Detail (Format Excel .xlsx)",
+            data=buffer.getvalue(),
+            file_name="Data_Detail_Isotank.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 
-# --- BAGIAN FORECAST & SUMMARY (MENGGUNAKAN df DEDUPLIKASI) ---
+# --- BAGIAN FORECAST & REKAP ---
 with tab_forecast:
-    st.markdown('<div class="main-title">Tabel Forecast Reagent</div>', unsafe_allow_html=True)
-    st.info("💡 **Petunjuk:** Forecast (Kg) bisa diinput manual di menu bawah berikut.")
+    st.subheader("📋 Tabel Forecast Reagent")
+    st.info("💡 **Total PO** dihitung dari jumlah QTY PR berdasarkan bulan pada DATE OUT. **Difference** = Total Qty Inbound (Non-Empty) - Total PO.")
 
     if not df.empty:
         df_fc = df.copy()
         
-        # 1. KONVERSI DATA ANGKA
-        if 'QTY' in df_fc.columns: df_fc['QTY_NUM'] = pd.to_numeric(df_fc['QTY'].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
-        else: df_fc['QTY_NUM'] = 0.0
+        # 1. Konversi data angka agar aman dijumlahkan
+        if 'QTY' in df_fc.columns:
+            df_fc['QTY_NUM'] = pd.to_numeric(df_fc['QTY'].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
+        else:
+            df_fc['QTY_NUM'] = 0.0
             
-        if 'QTY PR' in df_fc.columns: df_fc['QTY_PR_NUM'] = pd.to_numeric(df_fc['QTY PR'].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
-        else: df_fc['QTY_PR_NUM'] = 0.0
+        if 'QTY PR' in df_fc.columns:
+            df_fc['QTY_PR_NUM'] = pd.to_numeric(df_fc['QTY PR'].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
+        else:
+            df_fc['QTY_PR_NUM'] = 0.0
 
-        # 2. EKSTRAK BULAN
-        if 'DATE IN' in df_fc.columns:
-            df_fc['DATE_IN_DT'] = pd.to_datetime(df_fc['DATE IN'], errors='coerce')
-            df_fc['BULAN_IN'] = df_fc['DATE_IN_DT'].dt.month.fillna(0).astype(int)
-        else: df_fc['BULAN_IN'] = 0
-            
+        # 2. Ekstrak Bulan dari kolom DATE OUT
         if 'DATE OUT' in df_fc.columns:
             df_fc['DATE_OUT_DT'] = pd.to_datetime(df_fc['DATE OUT'], errors='coerce')
-            df_fc['BULAN_OUT'] = df_fc['DATE_OUT_DT'].dt.month.fillna(0).astype(int)
-        else: df_fc['BULAN_OUT'] = 0
+            df_fc['BULAN_OUT'] = df_fc['DATE_OUT_DT'].dt.month
+        else:
+            df_fc['BULAN_OUT'] = 0
 
-        # 3. WIDGET FILTER FORECAST & BULAN
+        # 3. Widget Filter Khusus Forecast
         col_fc1, col_fc2 = st.columns(2)
         
         kol_reag = next((col for col in df_fc.columns if 'REAGENT' in str(col).upper()), None)
@@ -229,153 +313,103 @@ with tab_forecast:
             reagent_pilihan = st.selectbox("Tampilkan Tabel Untuk Reagent:", list_opt_reagent, key="fc_reagent")
             
         with col_fc2:
-            bulan_pilihan = st.selectbox("Pilih Bulan Target (Acuan Date In & Date Out):", options=[1,2,3,4,5,6,7,8,9,10,11,12], index=datetime.now().month - 1)
+            bulan_pilihan = st.selectbox("Pilih Bulan Target (Untuk hitung Total PO):", 
+                                         options=[1,2,3,4,5,6,7,8,9,10,11,12], 
+                                         index=datetime.now().month - 1)
 
+        # Menerapkan Filter Reagent
         if reagent_pilihan != "Semua Reagent" and kol_reag:
             df_fc = df_fc[df_fc[kol_reag].astype(str).str.upper() == reagent_pilihan]
 
-        # 4. PERSIAPAN DATA VENDOR & INPUT FORECAST MANUAL
+        # 4. Susun Daftar Vendor
         list_vendor_fc = ["ROL100IDR", "DWI101IDR", "ENERGI JAYA INOVASI, PT", "ADI106IDR"]
         if 'Vendor' in df_fc.columns:
             vendor_tambahan = [v for v in df_fc['Vendor'].astype(str).unique() if v.strip() != '' and v not in list_vendor_fc and v != 'nan']
             list_vendor_fc.extend(vendor_tambahan)
-            
-        nama_bulan_dict = {1:'Jan', 2:'Feb', 3:'Mar', 4:'Apr', 5:'May', 6:'Jun', 7:'Jul', 8:'Aug', 9:'Sep', 10:'Oct', 11:'Nov', 12:'Dec'}
-        nama_bulan = nama_bulan_dict[bulan_pilihan]
 
-        if 'forecast_targets' not in st.session_state:
-            st.session_state['forecast_targets'] = {}
-        if bulan_pilihan not in st.session_state['forecast_targets']:
-            st.session_state['forecast_targets'][bulan_pilihan] = {
-                "ENERGI JAYA INOVASI PT": 200000,
-                "ROL100IDR": 200000, 
-                "DWI101IDR": 250000,
-                "ADI106IDR": 150000
-            }
-
-        with st.expander("⚙️ Atur Target Forecast (Kg) Manual", expanded=False):
-            st.markdown(f"**Masukkan Target Forecast Khusus Bulan {nama_bulan}:**")
-            cols = st.columns(4)
-            for i, v in enumerate(list_vendor_fc):
-                if v not in st.session_state['forecast_targets'][bulan_pilihan]:
-                    st.session_state['forecast_targets'][bulan_pilihan][v] = 0
-                    
-                default_val = st.session_state['forecast_targets'][bulan_pilihan][v]
-                new_val = cols[i % 4].number_input(f"{v}", value=int(default_val), step=1000, key=f"fc_{bulan_pilihan}_{v}")
-                st.session_state['forecast_targets'][bulan_pilihan][v] = new_val
-
-        # 5. LOGIKA KALKULASI LOOP PER VENDOR
+        # 5. Lakukan Kalkulasi Loop per Vendor
         data_rows = []
         for v in list_vendor_fc:
             d_v = df_fc[df_fc['Vendor'].astype(str) == v]
 
-            forecast_val = st.session_state['forecast_targets'][bulan_pilihan][v]
-            
-            # Logika QTY FIRST PO
-            qty_pr_bulan = d_v[d_v['BULAN_OUT'] == bulan_pilihan]['QTY_PR_NUM'].sum()
-            qty_po_kosong = d_v[d_v['BULAN_OUT'] == 0]['QTY_NUM'].sum()
-            first_po_qty = qty_pr_bulan + qty_po_kosong
+            # Hitung On Site (Empty & Full di Warehouse)
+            on_site_empty = len(d_v[d_v['STATUS'].astype(str).str.upper() == 'EMPTY'])
+            on_site_full = len(d_v[(d_v['STATUS'].astype(str).str.upper() == 'FULL') & (d_v['LOCATION'].astype(str).str.upper() == 'WAREHOUSE')])
 
-            # Logika On Site (Warehouse + 25KT)
-            df_onsite = d_v[d_v['LOCATION'].astype(str).str.upper().isin(['WAREHOUSE', '25KT'])]
-            on_site_empty = len(df_onsite[df_onsite['STATUS'].astype(str).str.upper() == 'EMPTY'])
-            on_site_full_unit = len(df_onsite[df_onsite['STATUS'].astype(str).str.upper() == 'FULL'])
-            on_site_full_kg = df_onsite[df_onsite['STATUS'].astype(str).str.upper() == 'FULL']['QTY_NUM'].sum()
-
-            # Inbound
+            # Hitung Inbound Koe - Wtr
             d_koe = d_v[d_v['LOCATION'].astype(str).str.upper() == 'INBOUND- KOE WTR']
             koe_iso = len(d_koe)
             koe_kg = d_koe['QTY_NUM'].sum()
+            koe_kg_non_empty = d_koe[d_koe['STATUS'].astype(str).str.upper() != 'EMPTY']['QTY_NUM'].sum()
 
+            # Hitung Inbound Sub - Koe
             d_sub = d_v[d_v['LOCATION'].astype(str).str.upper() == 'INBOUND - SUB KOE']
             sub_iso = len(d_sub)
             sub_kg = d_sub['QTY_NUM'].sum()
-            
-            d_hub = d_v[d_v['LOCATION'].astype(str).str.upper() == 'INBOUND HUB SUB']
-            hub_iso = len(d_hub)
-            hub_kg = d_hub['QTY_NUM'].sum()
-            
-            # Outbound Isotank
-            outbound_iso = len(d_v[d_v['LOCATION'].astype(str).str.upper().str.contains('OUTBOUND')])
-            
-            # Vendor PO has Supplied
-            if bulan_pilihan == 6:
-                mask_supplied = (d_v['BULAN_IN'] == 6) | ((d_v['BULAN_IN'] > 0) & (d_v['BULAN_IN'] <= 5) & (d_v['STATUS'].astype(str).str.upper() == 'FULL'))
-            else:
-                mask_supplied = (d_v['BULAN_IN'] == bulan_pilihan)
-            
-            supplied_kg = d_v[mask_supplied]['QTY_NUM'].sum()
-            difference = supplied_kg - first_po_qty
-            total_rotation = on_site_empty + on_site_full_unit + koe_iso + sub_iso + hub_iso + outbound_iso
+            sub_kg_non_empty = d_sub[d_sub['STATUS'].astype(str).str.upper() != 'EMPTY']['QTY_NUM'].sum()
+
+            # Hitung PO & Difference
+            d_po = d_v[d_v['BULAN_OUT'] == bulan_pilihan]
+            total_po = d_po['QTY_PR_NUM'].sum()
+            difference = (koe_kg_non_empty + sub_kg_non_empty) - total_po
 
             data_rows.append([
-                v, forecast_val, first_po_qty, 
-                on_site_empty, on_site_full_unit, on_site_full_kg, 
-                koe_iso, koe_kg, sub_iso, sub_kg, hub_iso, hub_kg,
-                outbound_iso, supplied_kg, difference, total_rotation
+                v, on_site_empty, on_site_full, 
+                koe_iso, koe_kg, 
+                sub_iso, sub_kg, 
+                total_po, difference
             ])
 
+        # Hitung Baris "TOTAL" Bawah
         total_row = ['TOTAL']
         for i in range(1, len(data_rows[0])):
             total_row.append(sum(row[i] for row in data_rows))
         data_rows.append(total_row)
 
-        # --- 6. STRUKTUR KOLOM BERTINGKAT (PERSIS GAMBAR) ---
+        # 6. Buat Struktur Kolom Bertingkat (MultiIndex)
         kolom_bertingkat = pd.MultiIndex.from_tuples([
-            ('Vendor', ''), ('Forecast ( Kg )', ''), (f"Qty First PO {nama_bulan}'26", ''),
-            ('On Site', 'Empty'), ('On Site', 'Full'), ('On Site', 'Qty (Kg)'),
-            ('Inbound Koe - Wtr', 'Qty Isotank'), ('Inbound Koe - Wtr', 'Qty (Kg)'),
-            ('Inbound Sub - Koe', 'Qty Isotank'), ('Inbound Sub - Koe', 'Qty ( Kg )'),
-            ('Inbound Hub Sub', 'Qty Isotank'), ('Inbound Hub Sub', 'Qty ( Kg )'),
-            ('Outbound Isotank', ''),
-            (f"Vendor PO {nama_bulan}'26", 'has Supplied (Kg)'), 
-            ('Difference', 'Qty ( Kg )'), ('Total Isotank Rotation', '')
+            ('Vendor', ''),
+            ('On Site', 'Empty (Unit)'), 
+            ('On Site', 'Full (Unit)'),
+            ('Inbound Koe - Wtr', 'Qty Isotank'), 
+            ('Inbound Koe - Wtr', 'Qty (Kg)'),
+            ('Inbound Sub - Koe', 'Qty Isotank'), 
+            ('Inbound Sub - Koe', 'Qty (Kg)'),
+            (f'Target PO Bulan {bulan_pilihan}', 'Total PO (Kg)'), 
+            (f'Target PO Bulan {bulan_pilihan}', 'Difference (Kg)')
         ])
 
+        # Generate DataFrame dan Tampilkan
         df_tabel_fc = pd.DataFrame(data_rows, columns=kolom_bertingkat)
         
-        # --- 7. FORMATTING & MEWARNAI TABEL MIRIP EXCEL ---
-        def format_angka_excel(val):
-            if pd.isna(val) or val == 0: return "-"
-            elif isinstance(val, (int, float)): return "{:,.0f}".format(val)
-            return val
-
-        def warnai_difference(val):
-            if isinstance(val, (int, float)):
-                if val < 0: return 'background-color: #f8cbad; color: #c00000;' # Merah
-                elif val > 0: return 'background-color: #c6efce; color: #00b050;' # Hijau
-            return 'background-color: #ffff00; color: black;' # Kuning Default
-
-        tabel_styled = df_tabel_fc.style.format(format_angka_excel)
-        
-        # Mewarnai kolom persis seperti di gambar
-        tabel_styled = tabel_styled.set_properties(**{'background-color': '#fce4d6', 'color': 'black'}, subset=[('On Site', 'Empty'), ('On Site', 'Full'), ('On Site', 'Qty (Kg)')])
-        tabel_styled = tabel_styled.set_properties(**{'background-color': '#fff2cc', 'color': 'black'}, subset=[('Inbound Koe - Wtr', 'Qty Isotank'), ('Inbound Koe - Wtr', 'Qty (Kg)')])
-        tabel_styled = tabel_styled.set_properties(**{'background-color': '#e2efda', 'color': 'black'}, subset=[('Inbound Sub - Koe', 'Qty Isotank'), ('Inbound Sub - Koe', 'Qty ( Kg )')])
-        tabel_styled = tabel_styled.set_properties(**{'background-color': '#ddebf7', 'color': 'black'}, subset=[('Inbound Hub Sub', 'Qty Isotank'), ('Inbound Hub Sub', 'Qty ( Kg )')])
-        tabel_styled = tabel_styled.set_properties(**{'background-color': '#ededed', 'color': 'black'}, subset=[('Outbound Isotank', '')])
-        tabel_styled = tabel_styled.set_properties(**{'background-color': '#ffff00', 'color': 'black'}, subset=[(f"Vendor PO {nama_bulan}'26", 'has Supplied (Kg)')])
-
-        try:
-            tabel_styled = tabel_styled.map(warnai_difference, subset=[('Difference', 'Qty ( Kg )')])
-        except AttributeError:
-            tabel_styled = tabel_styled.applymap(warnai_difference, subset=[('Difference', 'Qty ( Kg )')])
-        
-        st.dataframe(tabel_styled, use_container_width=True, hide_index=True)
+        st.dataframe(
+            df_tabel_fc.style.format({
+                ('Inbound Koe - Wtr', 'Qty (Kg)'): "{:,.0f}",
+                ('Inbound Sub - Koe', 'Qty (Kg)'): "{:,.0f}",
+                (f'Target PO Bulan {bulan_pilihan}', 'Total PO (Kg)'): "{:,.0f}",
+                (f'Target PO Bulan {bulan_pilihan}', 'Difference (Kg)'): "{:,.0f}"
+            }), 
+            use_container_width=True, 
+            hide_index=True
+        )
     else:
         st.warning("Data belum tersedia untuk membuat tabel Forecast.")
+
 
 # --- BAGIAN FORM INPUT (AUTOFILL & UPDATE) ---
 with tab_input:
     st.subheader("Form Input / Update Status Tangki")
     st.info("💡 Caranya: Ketik TANK ID terlebih dahulu. Jika data tangki sudah pernah ada, semua kolom di bawah akan otomatis terisi dengan data terakhirnya.")
 
+    # TANK ID ditaruh di luar form agar memicu deteksi real-time
     input_tank_id = st.text_input("👉 Masukkan TANK ID Anda:", key="input_tank_id_main").strip()
 
+    # Inisialisasi data default kosong
     exist_data = {}
     ditemukan = False
 
     if input_tank_id:
+        # Cari data terakhir (paling bawah di sheet) berdasarkan TANK ID tersebut
         df_match = df_mentah[df_mentah['TANK ID'].astype(str).str.strip() == input_tank_id]
         if not df_match.empty:
             exist_data = df_match.iloc[-1].to_dict()
@@ -384,18 +418,20 @@ with tab_input:
         else:
             st.info(f"✨ Tangki **{input_tank_id}** baru belum terdaftar. Silakan isi data dari awal.")
 
-    opsi_vendor = ["ROLIMEX", "DWIJAYA", "ENERGI JAYA INOVASI PT", "ADIMITRA", "ROL100IDR", "DWI101IDR", "ADI106IDR"]
+    # Pilihan Dropdown Dinamis
+    opsi_vendor = ["ROL100IDR", "DWI101IDR", "ENERGI JAYA INOVASI, PT", "ADI106IDR"]
     if not df_mentah.empty and 'Vendor' in df_mentah.columns:
         opsi_vendor = sorted(list(set(opsi_vendor + df_mentah['Vendor'].astype(str).unique().tolist())))
     if "-- Pilih Vendor --" not in opsi_vendor:
         opsi_vendor = ["-- Pilih Vendor --"] + opsi_vendor
 
-    opsi_lokasi = ["WAREHOUSE", "OUTBOUND KOE", "OUTBOUND HUB", "25KT", "INBOUND- KOE WTR", "INBOUND - SUB KOE", "INBOUND HUB SUB", "OUTBOUND"]
+    opsi_lokasi = ["WAREHOUSE", "OUTBOUND", "25KT", "INBOUND- KOE WTR", "INBOUND - SUB KOE"]
     if not df_mentah.empty and 'LOCATION' in df_mentah.columns:
         opsi_lokasi = sorted(list(set(opsi_lokasi + df_mentah['LOCATION'].astype(str).unique().tolist())))
     if "-- Pilih Lokasi --" not in opsi_lokasi:
         opsi_lokasi = ["-- Pilih Lokasi --"] + opsi_lokasi
 
+    # Index Finder untuk Dropdown Autofill
     def get_index(opsi_list, target_val):
         if target_val:
             target_str = str(target_val).strip().upper()
@@ -404,25 +440,35 @@ with tab_input:
                     return idx
         return 0
 
+    # Menyusun layout Form Pengisian
     kolom_form1, kolom_form2, kolom_form3 = st.columns(3)
     
     with kolom_form1:
         st.markdown("**1. Info Utama**")
+        
         idx_reagent = get_index(["-- Pilih Reagent --", "ACID", "ESCAID"], exist_data.get('Jenis Reagent', exist_data.get('REAGENT', '')))
         input_reagent = st.selectbox("Jenis Reagent / Acid (Wajib)", ["-- Pilih Reagent --", "ACID", "ESCAID"], index=idx_reagent)
+        
         idx_vendor = get_index(opsi_vendor, exist_data.get('Vendor', ''))
         input_vendor = st.selectbox("Vendor (Wajib)", opsi_vendor, index=idx_vendor)
+        
+        # Konversi QTY dengan safe_float agar bebas error string/kosong
         qty_awal = safe_float(exist_data.get('QTY', 0.0)) if ditemukan else 0.0
         input_qty = st.number_input("QTY (dalam KG)", min_value=0.0, value=qty_awal, step=1.0, format="%.2f")
         
     with kolom_form2:
         st.markdown("**2. Info Status**")
+        
         idx_status = get_index(["-- Pilih Status --", "FULL", "EMPTY", "INSTALL", "VENDOR"], exist_data.get('STATUS', ''))
         input_status = st.selectbox("STATUS (Wajib)", ["-- Pilih Status --", "FULL", "EMPTY", "INSTALL", "VENDOR"], index=idx_status)
+        
         idx_lokasi = get_index(opsi_lokasi, exist_data.get('LOCATION', ''))
         input_lokasi = st.selectbox("LOCATION (Wajib)", opsi_lokasi, index=idx_lokasi)
+        
+        # Konversi QTY ISSUED dengan aman
         qty_issued_awal = safe_float(exist_data.get('QTY ISSUED', 0.0)) if ditemukan else 0.0
         input_qty_issued = st.number_input("QTY ISSUED (KG)", min_value=0.0, value=qty_issued_awal, step=1.0, format="%.2f")
+        
         input_date_empty = st.date_input("Date Empty", value=konversi_ke_date(exist_data.get('Date Empty', '')))
         input_ps = st.text_input("PS", value=str(exist_data.get('PS', '')) if ditemukan else "")
         input_cm_in = st.text_input("CM IN", value=str(exist_data.get('CM IN', '')) if ditemukan else "")
@@ -432,8 +478,11 @@ with tab_input:
         input_date_in = st.date_input("DATE IN", value=konversi_ke_date(exist_data.get('DATE IN', '')))
         input_po_in = st.text_input("PO IN", value=str(exist_data.get('PO IN', '')) if ditemukan else "")
         input_pr_po_out = st.text_input("PR/PO OUT", value=str(exist_data.get('PR/PO OUT', '')) if ditemukan else "")
+        
+        # Konversi QTY PR dengan aman
         qty_pr_awal = safe_float(exist_data.get('QTY PR', 0.0)) if ditemukan else 0.0
         input_qty_pr = st.number_input("QTY PR (KG)", min_value=0.0, value=qty_pr_awal, step=1.0, format="%.2f")
+        
         input_cm_out = st.text_input("CM OUT", value=str(exist_data.get('CM OUT', '')) if ditemukan else "")
         input_date_out = st.date_input("DATE OUT", value=konversi_ke_date(exist_data.get('DATE OUT', '')))
         
@@ -441,11 +490,16 @@ with tab_input:
     tombol_simpan = st.button("💾 Update Data", type="primary")
     
     if tombol_simpan:
-        if input_tank_id == "": st.error("❌ Gagal: Masukkan TANK ID terlebih dahulu di kotak atas!")
-        elif input_vendor == "-- Pilih Vendor --": st.error("❌ Gagal: Kolom 'Vendor' harus dipilih!")
-        elif input_reagent == "-- Pilih Reagent --": st.error("❌ Gagal: Kolom 'Jenis Reagent / Acid' harus dipilih!")
-        elif input_status == "-- Pilih Status --": st.error("❌ Gagal: Kolom 'STATUS' harus dipilih!")
-        elif input_lokasi == "-- Pilih Lokasi --": st.error("❌ Gagal: Kolom 'LOCATION' harus dipilih!")
+        if input_tank_id == "":
+            st.error("❌ Gagal: Masukkan TANK ID terlebih dahulu di kotak atas!")
+        elif input_vendor == "-- Pilih Vendor --":
+            st.error("❌ Gagal: Kolom 'Vendor' harus dipilih!")
+        elif input_reagent == "-- Pilih Reagent --":
+            st.error("❌ Gagal: Kolom 'Jenis Reagent / Acid' harus dipilih!")
+        elif input_status == "-- Pilih Status --":
+            st.error("❌ Gagal: Kolom 'STATUS' harus dipilih!")
+        elif input_lokasi == "-- Pilih Lokasi --":
+            st.error("❌ Gagal: Kolom 'LOCATION' harus dipilih!")
         else:
             try:
                 client = get_gsheets_connection()
@@ -459,13 +513,13 @@ with tab_input:
                     input_vendor, input_tank_id, input_qty, "KG", 
                     input_status, input_lokasi, input_qty_issued, str_date_empty, 
                     input_ps, input_cm_in, str_date_in, input_po_in, 
-                    input_pr_po_out, input_qty_pr, input_cm_out, str_date_out, input_reagent
+                    input_pr_po_out, input_qty_pr, input_cm_out, str_date_out,
+                    input_reagent
                 ]
                 
                 worksheet.append_rows([baris_baru])
                 st.cache_data.clear() 
                 st.success(f"🎉 Sukses! Data terbaru tangki {input_tank_id} berhasil disimpan ke database Google Sheets.")
                 st.rerun()
-                
             except Exception as e:
                 st.error(f"❌ Gagal saat menyimpan data: {e}")
