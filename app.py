@@ -435,50 +435,7 @@ with tab_forecast:
         
         st.divider()
         
-        # ==========================================
-        # TABEL SUMMARY (VLOOKUP OTOMATIS)
-        # ==========================================
-        st.subheader("📑 Data Summary All Isotank (Last Status)")
-        st.info("💡 Tabel di bawah ini setara dengan proses **VLOOKUP** di Excel Anda. Sistem otomatis menarik dan menampilkan data *paling terbaru* untuk setiap TANK ID.")
-        
-        kolom_tersedia = df.columns.tolist()
-        col_vendor = "Vendor" if "Vendor" in kolom_tersedia else None
-        col_tank = "TANK ID" if "TANK ID" in kolom_tersedia else None
-        col_status = "STATUS" if "STATUS" in kolom_tersedia else None
-        col_lokasi = "LOCATION" if "LOCATION" in kolom_tersedia else None
-        col_qty_po = "QTY" if "QTY" in kolom_tersedia else None
-        col_qty_pr = "QTY PR" if "QTY PR" in kolom_tersedia else None
-        col_tgl_out = "DATE OUT" if "DATE OUT" in kolom_tersedia else None
-        col_pr = "PR/PO OUT" if "PR/PO OUT" in kolom_tersedia else None
-
-        kolom_ringkas = [c for c in [col_vendor, col_tank, col_status, col_lokasi, col_qty_po, col_qty_pr, col_tgl_out, col_pr] if c is not None]
-
-        if kolom_ringkas:
-            df_summary = df[kolom_ringkas].copy()
-            
-            rename_dict = {}
-            if col_qty_po: rename_dict[col_qty_po] = "Qty PO"
-            if col_qty_pr: rename_dict[col_qty_pr] = "Qty PR"
-            if col_tgl_out: rename_dict[col_tgl_out] = "Tanggal Out"
-            if col_pr: rename_dict[col_pr] = "PR"
-
-            df_summary = df_summary.rename(columns=rename_dict)
-
-            st.dataframe(df_summary, use_container_width=True, hide_index=True)
-            
-            buffer_summary = io.BytesIO()
-            with pd.ExcelWriter(buffer_summary, engine='openpyxl') as writer:
-                df_summary.to_excel(writer, index=False, sheet_name='Summary_Isotank')
-            st.download_button(
-                label="📥 Download Excel Data Summary",
-                data=buffer_summary.getvalue(),
-                file_name="Summary_All_Isotank.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-
-    else:
-        st.warning("Data belum tersedia.")
-# --- BAGIAN FORM INPUT (AUTOFILL & UPDATE) ---
+     # --- BAGIAN FORM INPUT (AUTOFILL & UPDATE) ---
 with tab_input:
     st.subheader("Form Input / Update Status Tangki")
     st.info("💡 Caranya: Ketik TANK ID terlebih dahulu. Jika data tangki sudah pernah ada, semua kolom di bawah akan otomatis terisi dengan data terakhirnya.")
